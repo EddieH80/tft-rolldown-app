@@ -88,22 +88,68 @@
 
   /* ─── BOARD ─── */
   .zone-label { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
-  .hex-board { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; flex: 1; }
-  .hex-cell, .bench-cell {
+
+  /* Hex board: absolute-positioned hexagons in a pointy-top offset grid */
+  #hex-board-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+  }
+  #hex-board {
+    position: absolute;
+    inset: 0;
+  }
+
+  .hex-cell {
+    position: absolute;
+    /* Pointy-top hex shape */
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: var(--bg-3);
+    display: flex; align-items: center; justify-content: center;
+    position: absolute;
+    overflow: hidden;
+    transition: filter 0.12s;
+    cursor: default;
+    box-sizing: border-box;
+  }
+  /* Highlight ring: we use a pseudo-wrapper since clip-path clips borders */
+  .hex-cell-wrap {
+    position: absolute;
+  }
+  .hex-cell-wrap::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: var(--border);
+    z-index: 0;
+  }
+  .hex-cell-wrap .hex-cell {
+    position: absolute;
+    inset: 2px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+  .hex-cell-wrap.drag-over::before  { background: var(--success); }
+  .hex-cell-wrap.sell-hover::before { background: var(--danger); }
+  .hex-cell-wrap.occupied::before   { background: var(--border-bright); }
+  .hex-cell-wrap.occupied { cursor: grab; }
+  .hex-cell-wrap.occupied:active    { cursor: grabbing; }
+
+  /* bench stays rectangular */
+  .bench-cell {
     border: 1px solid var(--border);
     border-radius: 4px;
     background: var(--bg-3);
     display: flex; align-items: center; justify-content: center;
     position: relative; overflow: hidden; transition: border-color 0.12s, background 0.12s;
     cursor: default;
+    max-height: 62px; aspect-ratio: 1;
   }
-  .hex-cell { max-height: 70px; aspect-ratio: 1; }
-  .bench-cell { max-height: 62px; aspect-ratio: 1; }
   .bench-row { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; }
-  .hex-cell.drag-over, .bench-cell.drag-over { border-color: var(--success) !important; background: rgba(39,174,96,0.12); }
-  .hex-cell.sell-hover, .bench-cell.sell-hover { border-color: var(--danger) !important; background: rgba(192,57,43,0.15); }
-  .hex-cell.occupied, .bench-cell.occupied { border-color: var(--border-bright); cursor: grab; }
-  .hex-cell.occupied:active, .bench-cell.occupied:active { cursor: grabbing; }
+  .bench-cell.drag-over  { border-color: var(--success) !important; background: rgba(39,174,96,0.12); }
+  .bench-cell.sell-hover { border-color: var(--danger)  !important; background: rgba(192,57,43,0.15); }
+  .bench-cell.occupied   { border-color: var(--border-bright); cursor: grab; }
+  .bench-cell.occupied:active { cursor: grabbing; }
 
   /* ─── UNIT TOKEN ─── */
   .unit-token { width:100%; height:100%; position:relative; display:flex; align-items:flex-end; }
@@ -386,7 +432,9 @@
   <div id="app-layout">
     <div id="board-area">
       <div class="zone-label">Board (<span id="board-count">0</span>/<span id="board-cap">8</span>)</div>
-      <div class="hex-board" id="hex-board"></div>
+      <div id="hex-board-wrap">
+        <div id="hex-board"></div>
+      </div>
       <div class="zone-label" style="margin-top:4px;">Bench (<span id="bench-count">0</span>/9)</div>
       <div class="bench-row" id="bench-row"></div>
     </div>
@@ -778,7 +826,7 @@ document.addEventListener('mousemove', (e) => {
   ghost.style.left = e.clientX + 'px';
   ghost.style.top = e.clientY + 'px';
   // highlight drag-over cells
-  document.querySelectorAll('.hex-cell, .bench-cell').forEach(c => {
+  document.querySelectorAll('.hex-cell-wrap, .bench-cell').forEach(c => {
     c.classList.remove('drag-over', 'sell-hover');
   });
   if (hoverCell) {
@@ -864,7 +912,13 @@ function startSession() {
   document.getElementById('config-screen').style.display = 'none';
   document.getElementById('summary-screen').style.display = 'none';
   startTimer();
-  renderAll();
+  // rAF ensures the board wrap has been laid out before we measure it for hex sizing
+  requestAnimationFrame(() => {
+    renderAll();
+    // Ensure resize observer is watching
+    const wrap = document.getElementById('hex-board-wrap');
+    if (wrap) _resizeObs.observe(wrap);
+  });
 }
 
 function endSession() {
@@ -912,20 +966,87 @@ function renderHUD() {
 }
 
 function renderBoard() {
+  const wrap = document.getElementById('hex-board-wrap');
   const el = document.getElementById('hex-board');
   el.innerHTML = '';
-  for (let i = 0; i < 28; i++) {
-    const div = document.createElement('div');
-    div.className = 'hex-cell';
-    const placed = session.board[i];
-    if (placed) {
-      div.classList.add('occupied');
-      div.appendChild(makeToken(placed));
+
+  // Measure available space
+  const W = wrap.clientWidth;
+  const H = wrap.clientHeight;
+
+  // TFT board: 4 rows × 7 cols, pointy-top hexagons
+  // Odd rows (0,2) start at x=0; even rows (1,3) are offset by hexW/2
+  // For pointy-top hex:
+  //   hexW = size * sqrt(3)
+  //   hexH = size * 2
+  //   horizontal spacing = hexW
+  //   vertical spacing   = hexH * 0.75
+  const COLS = 7, ROWS = 4;
+  const GAP = 3; // px between hexes
+
+  // Solve for hex size so the grid fits both W and H
+  // Total width needed  = COLS * hexW + 0.5 * hexW + 2*GAP*(COLS)  (extra 0.5 for offset rows)
+  // Total height needed = ROWS * hexH*0.75 + hexH*0.25 + 2*GAP*ROWS
+  // hexW = size * sqrt(3), hexH = size * 2  →  size = hexW / sqrt(3) = hexH / 2
+  // From width:  size = (W - GAP*(COLS+0.5)) / (sqrt(3) * (COLS + 0.5))
+  // From height: size = (H - GAP*(ROWS+0.25)) / (ROWS * 1.5 + 0.5)
+  const SQ3 = Math.sqrt(3);
+  const sizeFromW = (W - GAP * (COLS + 0.5)) / (SQ3 * (COLS + 0.5));
+  const sizeFromH = (H - GAP * (ROWS + 0.25)) / (ROWS * 1.5 + 0.5);
+  const size = Math.max(4, Math.min(sizeFromW, sizeFromH));
+
+  const hexW = SQ3 * size;
+  const hexH = 2 * size;
+  const colStep = hexW + GAP;
+  const rowStep = hexH * 0.75 + GAP;
+
+  // Total grid dimensions for centering
+  const totalW = COLS * colStep + hexW * 0.5; // odd-row offset adds half hex
+  const totalH = ROWS * rowStep + hexH * 0.25;
+  const offsetX = (W - totalW) / 2;
+  const offsetY = (H - totalH) / 2;
+
+  el.style.width = W + 'px';
+  el.style.height = H + 'px';
+
+  for (let row = 0; row < ROWS; row++) {
+    // Odd rows (1,3 in 0-index) are offset right by half a hex width
+    const rowOffsetX = (row % 2 === 1) ? hexW * 0.5 + GAP * 0.5 : 0;
+    for (let col = 0; col < COLS; col++) {
+      const idx = row * COLS + col;
+      const cx = offsetX + rowOffsetX + col * colStep;
+      const cy = offsetY + row * rowStep;
+
+      // Outer wrapper (sets position, provides the border ring via ::before)
+      const wrapDiv = document.createElement('div');
+      wrapDiv.className = 'hex-cell-wrap';
+      wrapDiv.style.cssText = `left:${cx}px; top:${cy}px; width:${hexW}px; height:${hexH}px;`;
+      wrapDiv.dataset.idx = idx;
+
+      // Inner hex (clipped, holds content)
+      const cell = document.createElement('div');
+      cell.className = 'hex-cell';
+
+      const placed = session.board[idx];
+      if (placed) {
+        wrapDiv.classList.add('occupied');
+        cell.appendChild(makeToken(placed));
+      }
+
+      wrapDiv.appendChild(cell);
+      initDragOnCell(wrapDiv, 'board', idx);
+      el.appendChild(wrapDiv);
     }
-    initDragOnCell(div, 'board', i);
-    el.appendChild(div);
   }
 }
+
+// Re-run renderBoard on resize so hex positions stay correct
+const _resizeObs = new ResizeObserver(() => { if (session && !session.ended) renderBoard(); });
+// Observe once the element exists (script runs after body is parsed)
+setTimeout(() => {
+  const wrap = document.getElementById('hex-board-wrap');
+  if (wrap) _resizeObs.observe(wrap);
+}, 0);
 
 function renderBench() {
   const el = document.getElementById('bench-row');
