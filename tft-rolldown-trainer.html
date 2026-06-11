@@ -201,15 +201,26 @@
   .shop-slot.will-upgrade-3 {
     animation: upgrade-pulse-gold 1.8s ease-in-out infinite;
   }
-  /* Art fills the whole card */
+  /* Blurred backdrop fills card sides when art is contained */
+  .shop-slot::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: var(--slot-bg-img);
+    background-size: cover;
+    background-position: center 30%;
+    filter: blur(8px) brightness(0.35);
+    z-index: 0;
+  }
+  .shop-slot.empty::before { display: none; }
+  /* Art: contained so full body is always visible */
   .shop-art {
     position: absolute; inset: 0;
-    width: 100%; height: 160%;
-    top: -30%;
-    object-fit: cover; object-position: center 35%;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    object-position: center 10%;
     display: block;
-    background: var(--bg-4);
-    transform-origin: top center;
+    background: transparent;
+    z-index: 1;
   }
   /* Info strip overlaid at the bottom */
   .shop-info {
@@ -397,7 +408,36 @@
   .summary-btn.secondary { border-color:var(--border-bright); color:var(--text-muted); }
   .summary-btn.secondary:hover { border-color:var(--text-muted); color:var(--text); }
 
-  /* ─── SHOP SELL ZONE ─── */
+  /* ─── SHOP ODDS BAR ─── */
+  #shop-odds {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 8px;
+  }
+  .shop-odds-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .shop-odds-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .shop-odds-item.c1 { color: var(--cost1); }
+  .shop-odds-item.c2 { color: var(--cost2); }
+  .shop-odds-item.c3 { color: var(--cost3); }
+  .shop-odds-item.c4 { color: var(--cost4); }
+  .shop-odds-item.c5 { color: var(--cost5); }
+  .shop-odds-dot.c1 { background: var(--cost1); }
+  .shop-odds-dot.c2 { background: var(--cost2); }
+  .shop-odds-dot.c3 { background: var(--cost3); }
+  .shop-odds-dot.c4 { background: var(--cost4); }
+  .shop-odds-dot.c5 { background: var(--cost5); }
   #shop-sell-zone {
     display: none;
     position: absolute;
@@ -535,6 +575,7 @@
       <div class="shop-controls">
         <button class="shop-action-btn btn-reroll" id="btn-reroll" onclick="doReroll()"><span class="kbd">D</span> Reroll <span style="color:var(--gold-dim);font-size:10px;">(2g)</span></button>
         <button class="shop-action-btn btn-buyxp" id="btn-buyxp" onclick="doBuyXP()"><span class="kbd">F</span> Buy XP <span style="color:#3A7BD5;font-size:10px;">(4g)</span></button>
+        <div id="shop-odds"></div>
       </div>
       <div class="shop-slots" id="shop-slots"></div>
     </div>
@@ -867,8 +908,8 @@ function sellValue(placed) {
     return cost;
   }
   if (cost === 1) {
-    // 1-cost multi-star: 3 × starLevel × 1 (6g for 2★, 9g for 3★)
-    return 3 * starLevel;
+    // 1-cost 2★ = 3g, 1-cost 3★ = 9g
+    return starLevel === 2 ? 3 : 9;
   }
   if (starLevel === 2) {
     // 2-star non-1-cost: 3 × unit cost - 1
@@ -1068,6 +1109,26 @@ function renderAll() {
   renderHUD(); renderBoard(); renderBench(); renderShop(); renderSidebar();
 }
 
+function renderOdds() {
+  const el = document.getElementById('shop-odds');
+  if (!el || !session) return;
+  el.innerHTML = '';
+  const odds = ODDS[session.level];
+  odds.forEach((pct, i) => {
+    if (pct === 0) return;
+    const cost = i + 1;
+    const item = document.createElement('div');
+    item.className = `shop-odds-item c${cost}`;
+    const dot = document.createElement('div');
+    dot.className = `shop-odds-dot c${cost}`;
+    const txt = document.createElement('span');
+    txt.textContent = `${Math.round(pct * 100)}%`;
+    item.appendChild(dot);
+    item.appendChild(txt);
+    el.appendChild(item);
+  });
+}
+
 function renderHUD() {
   document.getElementById('hud-level').textContent = session.level;
   document.getElementById('hud-gold').textContent = session.cfg.infiniteGold ? '∞' : session.gold;
@@ -1084,6 +1145,7 @@ function renderHUD() {
   document.getElementById('bench-count').textContent = session.bench.filter(Boolean).length;
   document.getElementById('btn-reroll').disabled = !session.cfg.infiniteGold && session.gold < 2;
   document.getElementById('btn-buyxp').disabled = (!session.cfg.infiniteGold && session.gold < 4) || session.level >= 10;
+  renderOdds();
 }
 
 function renderBoard() {
@@ -1274,7 +1336,10 @@ function renderShop() {
 
     div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}${upgrade===2?' will-upgrade-2':upgrade===3?' will-upgrade-3':''}`;
 
-    // Art — fills full card absolutely
+    // Set background image var for blurred backdrop pseudo-element
+    div.style.setProperty('--slot-bg-img', `url('${tileUrl(unit)}')`);
+
+    // Art: contained so full body visible
     const img = document.createElement('img');
     img.className = 'shop-art';
     img.src = tileUrl(unit); img.alt = unit.displayName;
