@@ -730,17 +730,20 @@ function purchaseUnit(slotIdx) {
 
 function checkCombine(uid) {
   // Keep combining until stable (handles cascades: 3×1★→2★, then if 3×2★→3★)
+  // Board copies always take priority as the "survivor" — bench copies are consumed first.
   let changed = true;
   while (changed) {
     changed = false;
+    // Build lists sorted so BOARD entries come before BENCH entries.
+    // The first entry (index 0) will be the survivor; indices 1+ are consumed.
     const all = [
+      ...session.board.map((u,i)=>u?{u,type:'board',i}:null).filter(Boolean), // board first
       ...session.bench.map((u,i)=>u?{u,type:'bench',i}:null).filter(Boolean),
-      ...session.board.map((u,i)=>u?{u,type:'board',i}:null).filter(Boolean),
     ];
     // Check 1★ combine (3×1★ → 1×2★)
     const oneStars = all.filter(x => x.u.unit.id === uid && x.u.copies === 1);
     if (oneStars.length >= 3) {
-      // Remove 2nd and 3rd copies
+      // Consume the last two (bench-biased), keep the first (board-biased)
       oneStars.slice(1,3).forEach(p => {
         if(p.type==='bench') session.bench[p.i]=null; else session.board[p.i]=null;
       });
@@ -1090,6 +1093,19 @@ function makeToken(placed) {
   return div;
 }
 
+// Returns 2, 3, or null — what star level buying this unit would produce
+function getUpgradePreview(uid) {
+  const all = [
+    ...session.board.map(u=>u&&u.unit.id===uid?u:null).filter(Boolean),
+    ...session.bench.map(u=>u&&u.unit.id===uid?u:null).filter(Boolean),
+  ];
+  const ones = all.filter(u=>u.copies===1).length;
+  const twos = all.filter(u=>u.copies===2).length;
+  if (ones >= 2 && twos >= 2) return 3; // buying 3rd 1★ → 2★ → cascades to 3★
+  if (ones >= 2)              return 2; // buying 3rd 1★ → 2★
+  return null;
+}
+
 function renderShop() {
   const el = document.getElementById('shop-slots');
   el.innerHTML = '';
@@ -1100,12 +1116,26 @@ function renderShop() {
     else {
       const isTarget = session.cfg.plannerIds.includes(unit.id);
       const cantAfford = session.gold < unit.cost;
-      div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}`;
+      const upgrade = getUpgradePreview(unit.id); // null | 2 | 3
+      div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}${upgrade?' will-upgrade':''}`;
+
+      // Target-planner star badge (top-left)
       if (isTarget) {
         const star = document.createElement('div');
         star.className = 'shop-target-star'; star.textContent = '★';
         div.appendChild(star);
       }
+
+      // Upgrade badge (bottom-left overlay on the art)
+      if (upgrade) {
+        const badge = document.createElement('div');
+        badge.className = `shop-upgrade-badge upgrade-${upgrade}`;
+        badge.innerHTML = upgrade === 3
+          ? '<span class="upgrade-stars">★★★</span><span class="upgrade-label">3★</span>'
+          : '<span class="upgrade-stars">★★</span><span class="upgrade-label">2★</span>';
+        div.appendChild(badge);
+      }
+
       const img = document.createElement('img');
       img.className = 'shop-art'; img.src = tileUrl(unit); img.alt = unit.displayName;
       img.onerror = () => { img.src = squareUrl(unit); img.onerror=()=>{ img.style.background='var(--bg-4)'; img.style.display='none'; }; };
@@ -1122,6 +1152,15 @@ function renderShop() {
       const ct = document.createElement('div');
       ct.className = `cost-text c${unit.cost}`; ct.textContent = `${unit.cost}g`;
       if (cantAfford) { ct.style.color='var(--text-dim)'; gem.style.opacity='0.4'; }
+
+      // Inline upgrade stars next to gold cost
+      if (upgrade) {
+        const upStars = document.createElement('span');
+        upStars.style.cssText = `margin-left:4px; font-size:9px; color:${upgrade===3?'#FFD700':'#ccc'}; letter-spacing:0px;`;
+        upStars.textContent = upgrade === 3 ? '★★★' : '★★';
+        ct.appendChild(upStars);
+      }
+
       cr.appendChild(gem); cr.appendChild(ct); info.appendChild(cr);
       div.appendChild(info);
       const si = i;
