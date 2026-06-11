@@ -189,10 +189,12 @@
   /* Art fills the whole card */
   .shop-art {
     position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover; object-position: top center;
+    width: 100%; height: 130%;
+    top: -15%;
+    object-fit: cover; object-position: center 25%;
     display: block;
     background: var(--bg-4);
+    transform-origin: top center;
   }
   /* Info strip overlaid at the bottom */
   .shop-info {
@@ -851,9 +853,13 @@ function sellValue(placed) {
   }
   if (cost === 1) {
     // 1-cost multi-star: 3 × starLevel × 1 (6g for 2★, 9g for 3★)
-    return 3 * starLevel * cost;
+    return 3 * starLevel;
   }
-  // 2★ or 3★ non-1-cost: 9 × unit cost - 1
+  if (starLevel === 2) {
+    // 2-star non-1-cost: 6 × unit cost - 1
+    return 6 * cost - 1;
+  }
+  // 3-star non-1-cost: 9 × unit cost - 1
   return 9 * cost - 1;
 }
 
