@@ -81,7 +81,7 @@
 
   /* ─── LAYOUT ─── */
   #app-wrap { display: flex; flex-direction: column; height: 100vh; }
-  #app-layout { display: grid; grid-template-columns: 1fr 210px; grid-template-rows: 1fr auto; flex: 1; overflow: hidden; }
+  #app-layout { display: grid; grid-template-columns: 1fr 240px; grid-template-rows: 1fr auto; flex: 1; overflow: hidden; }
   #board-area { grid-column:1; grid-row:1; padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
   #sidebar { grid-column:2; grid-row:1/3; background: var(--bg-2); border-left: 1px solid var(--border); overflow-y: auto; padding: 10px; }
   #shop-area { grid-column:1; grid-row:2; background: var(--bg-2); border-top: 1px solid var(--border); padding: 10px 12px; }
@@ -157,11 +157,74 @@
   .trait-pips { display:flex; gap:2px; }
   .trait-pip { width:7px; height:7px; border-radius:50%; background:var(--border-bright); }
   .trait-pip.active { background:var(--gold); }
-  .planner-unit-row { display:flex; align-items:center; gap:5px; padding:3px 5px; background:var(--bg-3); border-radius:var(--radius); border:1px solid var(--border); margin-bottom:3px; }
-  .planner-unit-icon { width:26px; height:26px; border-radius:3px; object-fit:cover; object-position:top; flex-shrink:0; background:var(--bg-4); }
-  .planner-unit-name { font-size:10px; font-weight:600; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .planner-unit-cost { font-size:9px; font-weight:700; padding:1px 4px; border-radius:3px; }
-  .planner-unit-cost.c1{background:var(--cost1);color:#000} .planner-unit-cost.c2{background:var(--cost2);color:#fff} .planner-unit-cost.c3{background:var(--cost3);color:#fff} .planner-unit-cost.c4{background:var(--cost4);color:#fff} .planner-unit-cost.c5{background:var(--cost5);color:#000}
+  /* ─── TEAM PLANNER PANEL (in-game style) ─── */
+  .planner-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .planner-slot {
+    aspect-ratio: 0.75;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    border: 2px solid transparent;
+    background: var(--bg-3);
+  }
+  .planner-slot.empty-slot {
+    border: 1px dashed var(--border);
+    opacity: 0.35;
+  }
+  .planner-slot.cost1 { border-color: var(--cost1); }
+  .planner-slot.cost2 { border-color: var(--cost2); }
+  .planner-slot.cost3 { border-color: var(--cost3); }
+  .planner-slot.cost4 { border-color: var(--cost4); }
+  .planner-slot.cost5 { border-color: var(--cost5); }
+  .planner-slot img {
+    width: 100%; height: 100%;
+    object-fit: cover; object-position: top center;
+    display: block;
+  }
+  .planner-slot-name {
+    position: absolute; bottom: 0; width: 100%;
+    background: rgba(0,0,0,0.78);
+    font-size: 7px; font-weight: 600; color: #fff;
+    text-align: center; padding: 2px 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .planner-slot-cost {
+    position: absolute; top: 2px; right: 2px;
+    width: 10px; height: 10px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6px; font-weight: 700;
+  }
+  .planner-trait-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+  .planner-trait-row {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--bg-3); border-radius: 3px; padding: 3px 6px;
+  }
+  .planner-trait-icon {
+    width: 14px; height: 14px; border-radius: 2px;
+    background: var(--bg-4); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--gold);
+  }
+  .planner-trait-name { font-size: 10px; color: var(--text); flex: 1; }
+  .planner-trait-fraction { font-size: 10px; font-weight: 700; color: var(--gold); }
+  .planner-unit-remove {
+    position: absolute; top: 1px; left: 1px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: rgba(192,57,43,0.85);
+    display: none; align-items: center; justify-content: center;
+    font-size: 8px; font-weight: 700; color: #fff; cursor: pointer; z-index: 5;
+  }
+  .planner-slot:hover .planner-unit-remove { display: flex; }
+  .planner-slot.cost1 .planner-slot-cost{background:var(--cost1);color:#000}
+  .planner-slot.cost2 .planner-slot-cost{background:var(--cost2);color:#fff}
+  .planner-slot.cost3 .planner-slot-cost{background:var(--cost3);color:#fff}
+  .planner-slot.cost4 .planner-slot-cost{background:var(--cost4);color:#fff}
+  .planner-slot.cost5 .planner-slot-cost{background:var(--cost5);color:#000}
   .sidebar-empty { font-size:11px; color:var(--text-dim); font-style:italic; text-align:center; padding:10px 0; }
   #sidebar::-webkit-scrollbar { width:3px; }
   #sidebar::-webkit-scrollbar-thumb { background:var(--border-bright); border-radius:2px; }
@@ -351,26 +414,26 @@ const UNITS = [
   {id:'aatrox',    displayName:"Aatrox",        cost:1, traits:["N.O.V.A.","Bastion"],              key:'aatrox'},
   {id:'briar',     displayName:"Briar",          cost:1, traits:["Anima","Primordian","Rogue"],       key:'briar'},
   {id:'caitlyn',   displayName:"Caitlyn",        cost:1, traits:["N.O.V.A.","Fateweaver"],           key:'caitlyn'},
-  {id:'chogath',   displayName:"Cho'Gath",       cost:1, traits:["Dark Star","Brawler"],              key:'chogath'},
+  {id:'chogath',   displayName:"Cho'Gath",       cost:1, traits:["Dark Star","Brawler"],              key:'chogath', dkey:'Chogath'},
   {id:'ezreal',    displayName:"Ezreal",          cost:1, traits:["Timebreaker","Sniper"],             key:'ezreal'},
   {id:'leona',     displayName:"Leona",           cost:1, traits:["Arbiter","Vanguard"],              key:'leona'},
   {id:'lissandra', displayName:"Lissandra",       cost:1, traits:["Dark Star","Shepherd","Replicator"],key:'lissandra'},
   {id:'nasus',     displayName:"Nasus",           cost:1, traits:["Space Groove","Vanguard"],         key:'nasus'},
   {id:'poppy',     displayName:"Poppy",           cost:1, traits:["Meeple","Bastion"],                key:'poppy'},
-  {id:'reksai',    displayName:"Rek'Sai",         cost:1, traits:["Primordian","Brawler"],            key:'reksai'},
+  {id:'reksai',    displayName:"Rek'Sai",         cost:1, traits:["Primordian","Brawler"],            key:'reksai', dkey:'RekSai'},
   {id:'talon',     displayName:"Talon",           cost:1, traits:["Stargazer","Rogue"],               key:'talon'},
   {id:'teemo',     displayName:"Teemo",           cost:1, traits:["Space Groove","Shepherd"],         key:'teemo'},
-  {id:'twistedfate',displayName:"Twisted Fate",  cost:1, traits:["Stargazer","Fateweaver"],          key:'twistedfate'},
+  {id:'twistedfate',displayName:"Twisted Fate",  cost:1, traits:["Stargazer","Fateweaver"],          key:'twistedfate', dkey:'TwistedFate'},
   {id:'veigar',    displayName:"Veigar",          cost:1, traits:["Meeple","Replicator"],             key:'veigar'},
   // 2-cost
   {id:'akali',     displayName:"Akali",           cost:2, traits:["N.O.V.A.","Marauder"],            key:'akali'},
-  {id:'belveth',   displayName:"Bel'Veth",        cost:2, traits:["Primordian","Challenger","Marauder"],key:'belveth'},
+  {id:'belveth',   displayName:"Bel'Veth",        cost:2, traits:["Primordian","Challenger","Marauder"],key:'belveth', dkey:'Belveth'},
   {id:'gnar',      displayName:"Gnar",            cost:2, traits:["Meeple","Sniper"],                key:'gnar'},
   {id:'gragas',    displayName:"Gragas",          cost:2, traits:["Psionic","Brawler"],              key:'gragas'},
   {id:'gwen',      displayName:"Gwen",            cost:2, traits:["Space Groove","Rogue"],           key:'gwen'},
   {id:'jax',       displayName:"Jax",             cost:2, traits:["Stargazer","Bastion"],            key:'jax'},
   {id:'jinx',      displayName:"Jinx",            cost:2, traits:["Anima","Challenger"],             key:'jinx'},
-  {id:'meepsie',   displayName:"Meepsie",         cost:2, traits:["Meeple","Shepherd","Voyager"],    key:'yuumi'},
+  {id:'meepsie',   displayName:"Meepsie",         cost:2, traits:["Meeple","Shepherd","Voyager"],    key:'yuumi', dkey:'Yuumi'},
   {id:'milio',     displayName:"Milio",           cost:2, traits:["Timebreaker","Fateweaver"],       key:'milio'},
   {id:'mordekaiser',displayName:"Mordekaiser",    cost:2, traits:["Dark Star","Conduit","Vanguard"],  key:'mordekaiser'},
   {id:'pantheon',  displayName:"Pantheon",        cost:2, traits:["Timebreaker","Brawler","Replicator"],key:'pantheon'},
@@ -381,29 +444,29 @@ const UNITS = [
   {id:'diana',     displayName:"Diana",           cost:3, traits:["Arbiter","Challenger"],           key:'diana'},
   {id:'fizz',      displayName:"Fizz",            cost:3, traits:["Meeple","Rogue"],                 key:'fizz'},
   {id:'illaoi',    displayName:"Illaoi",          cost:3, traits:["Anima","Vanguard","Shepherd"],    key:'illaoi'},
-  {id:'kaisa',     displayName:"Kai'Sa",          cost:3, traits:["Dark Star","Rogue"],              key:'kaisa'},
+  {id:'kaisa',     displayName:"Kai'Sa",          cost:3, traits:["Dark Star","Rogue"],              key:'kaisa', dkey:'Kaisa'},
   {id:'lulu',      displayName:"Lulu",            cost:3, traits:["Stargazer","Replicator"],         key:'lulu'},
   {id:'maokai',    displayName:"Maokai",          cost:3, traits:["N.O.V.A.","Brawler"],            key:'maokai'},
-  {id:'missfortune',displayName:"Miss Fortune",   cost:3, traits:["Gun Goddess"],                   key:'missfortune'},
+  {id:'missfortune',displayName:"Miss Fortune",   cost:3, traits:["Gun Goddess"],                   key:'missfortune', dkey:'MissFortune'},
   {id:'ornn',      displayName:"Ornn",            cost:3, traits:["Space Groove","Bastion"],        key:'ornn'},
-  {id:'rhaast',    displayName:"Rhaast",          cost:3, traits:["Redeemer"],                      key:'kayn'},
+  {id:'rhaast',    displayName:"Rhaast",          cost:3, traits:["Redeemer"],                      key:'kayn', dkey:'Kayn'},
   {id:'samira',    displayName:"Samira",          cost:3, traits:["Space Groove","Sniper"],          key:'samira'},
   {id:'urgot',     displayName:"Urgot",           cost:3, traits:["Mecha","Brawler","Marauder"],    key:'urgot'},
   {id:'viktor',    displayName:"Viktor",          cost:3, traits:["Psionic","Conduit"],             key:'viktor'},
   // 4-cost
-  {id:'aurelionsol',displayName:"Aurelion Sol",   cost:4, traits:["Mecha","Conduit"],               key:'aurelionsol'},
+  {id:'aurelionsol',displayName:"Aurelion Sol",   cost:4, traits:["Mecha","Conduit"],               key:'aurelionsol', dkey:'AurelionSol'},
   {id:'corki',     displayName:"Corki",           cost:4, traits:["Meeple","Fateweaver"],           key:'corki'},
-  {id:'mightymech',displayName:"The Mighty Mech", cost:4, traits:["Mecha","Voyager"],              key:'rumble'},
+  {id:'mightymech',displayName:"The Mighty Mech", cost:4, traits:["Mecha","Voyager"],              key:'rumble', dkey:'Rumble'},
   {id:'karma',     displayName:"Karma",           cost:4, traits:["Dark Star","Voyager"],           key:'karma'},
   {id:'kindred',   displayName:"Kindred",         cost:4, traits:["N.O.V.A.","Challenger"],        key:'kindred'},
-  {id:'leblanc',   displayName:"LeBlanc",         cost:4, traits:["Arbiter","Shepherd"],           key:'leblanc'},
-  {id:'masteryi',  displayName:"Master Yi",       cost:4, traits:["Psionic","Marauder"],           key:'masteryi'},
+  {id:'leblanc',   displayName:"LeBlanc",         cost:4, traits:["Arbiter","Shepherd"],           key:'leblanc', dkey:'Leblanc'},
+  {id:'masteryi',  displayName:"Master Yi",       cost:4, traits:["Psionic","Marauder"],           key:'masteryi', dkey:'MasterYi'},
   {id:'morgana',   displayName:"Morgana",         cost:4, traits:["Dark Lady"],                    key:'morgana'},
   {id:'nami',      displayName:"Nami",            cost:4, traits:["Space Groove","Replicator"],    key:'nami'},
-  {id:'nunu',      displayName:"Nunu",            cost:4, traits:["Stargazer","Vanguard"],         key:'nunu'},
+  {id:'nunu',      displayName:"Nunu",            cost:4, traits:["Stargazer","Vanguard"],         key:'nunu', dkey:'Nunu'},
   {id:'rammus',    displayName:"Rammus",          cost:4, traits:["Meeple","Bastion"],             key:'rammus'},
   {id:'riven',     displayName:"Riven",           cost:4, traits:["Timebreaker","Rogue"],          key:'riven'},
-  {id:'tahmkench', displayName:"Tahm Kench",      cost:4, traits:["Oracle","Brawler"],             key:'tahmkench'},
+  {id:'tahmkench', displayName:"Tahm Kench",      cost:4, traits:["Oracle","Brawler"],             key:'tahmkench', dkey:'TahmKench'},
   {id:'xayah',     displayName:"Xayah",           cost:4, traits:["Stargazer","Sniper"],           key:'xayah'},
   // 5-cost
   {id:'bard',      displayName:"Bard",            cost:5, traits:["Meeple","Conduit"],             key:'bard'},
@@ -417,9 +480,33 @@ const UNITS = [
   {id:'zed',       displayName:"Zed",             cost:5, traits:["Galaxy Hunter"],                key:'zed'},
 ];
 
-// Image URL builder
+// Image URL builder — uses ddragon loading art (portrait format, reliable cross-origin)
+// Loading splash: https://ddragon.leagueoflegends.com/cdn/img/champion/loading/{Key}_0.jpg
+// Square icon fallback: https://ddragon.leagueoflegends.com/cdn/{ver}/img/champion/{Key}.png
+
+let DDRAGON_VER = '15.12.1'; // updated automatically on load
+
+// Fetch latest ddragon version from Riot API
+fetch('https://ddragon.leagueoflegends.com/api/versions.json')
+  .then(r => r.json())
+  .then(versions => { if (versions && versions[0]) DDRAGON_VER = versions[0]; })
+  .catch(() => {}); // silently keep default if offline
+
+function ddragonKey(unit) {
+  // ddragon uses PascalCase exact champion keys
+  return unit.dkey || unit.key.charAt(0).toUpperCase() + unit.key.slice(1);
+}
+
 function tileUrl(unit) {
-  return `https://cdn.communitydragon.org/latest/champion/${unit.key}/tile`;
+  // Loading splash art — tall portrait format, ideal for our cards
+  const k = ddragonKey(unit);
+  return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${k}_0.jpg`;
+}
+
+function squareUrl(unit) {
+  // Small square icon — used for compact planner list items
+  const k = ddragonKey(unit);
+  return `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VER}/img/champion/${k}.png`;
 }
 
 const POOL_SIZES = {1:30, 2:25, 3:18, 4:10, 5:9};
@@ -544,40 +631,81 @@ function purchaseUnit(slotIdx) {
   if (!session || session.ended) return;
   const unit = session.shop[slotIdx];
   if (!unit || session.gold < unit.cost) return;
-  const benchIdx = session.bench.indexOf(null);
-  if (benchIdx === -1) { flashRed(document.getElementById('bench-row')); return; }
-  session.gold -= unit.cost;
-  session.shop[slotIdx] = null;
-  if (session.shopReserved[unit.id]) {
-    session.shopReserved[unit.id]--;
-    if (!session.shopReserved[unit.id]) delete session.shopReserved[unit.id];
+
+  const benchFull = session.bench.indexOf(null) === -1;
+
+  if (benchFull) {
+    // Check if buying this unit would trigger a combine (freeing a bench slot)
+    const oneStars = [
+      ...session.bench.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===1?{u,type:'bench',i}:null).filter(Boolean),
+      ...session.board.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===1?{u,type:'board',i}:null).filter(Boolean),
+    ];
+    const twoStars = [
+      ...session.bench.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===2?{u,type:'bench',i}:null).filter(Boolean),
+      ...session.board.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===2?{u,type:'board',i}:null).filter(Boolean),
+    ];
+    // Need ≥2 existing 1-stars (buying a 3rd triggers 2★ combine, freeing 2 slots → net +1)
+    // OR ≥2 existing 2-stars (buying triggers 1★+2★+2★ → 3★ combine, freeing 2 slots)
+    const willCombine = oneStars.length >= 2 || twoStars.length >= 2;
+    if (!willCombine) { flashRed(document.getElementById('bench-row')); return; }
+
+    // Use a virtual overflow slot: push the new unit onto the bench array temporarily,
+    // checkCombine will collapse it back down to ≤9 slots via nulling consumed units.
+    session.gold -= unit.cost;
+    session.shop[slotIdx] = null;
+    if (session.shopReserved[unit.id]) {
+      session.shopReserved[unit.id]--;
+      if (!session.shopReserved[unit.id]) delete session.shopReserved[unit.id];
+    }
+    // Temporarily extend bench to hold the new unit, then combine collapses it
+    session.bench.push({unit, copies:1});
+    checkCombine(unit.id);
+    // Trim any null-padded slots beyond 9 that resulted from combine
+    session.bench = session.bench.filter((u, i) => i < 9 || u !== null).slice(0, 9);
+    // If bench still has >9 real units something went wrong — shouldn't happen
+  } else {
+    const benchIdx = session.bench.indexOf(null);
+    session.gold -= unit.cost;
+    session.shop[slotIdx] = null;
+    if (session.shopReserved[unit.id]) {
+      session.shopReserved[unit.id]--;
+      if (!session.shopReserved[unit.id]) delete session.shopReserved[unit.id];
+    }
+    session.bench[benchIdx] = {unit, copies:1};
+    checkCombine(unit.id);
   }
-  session.bench[benchIdx] = {unit, copies:1};
-  checkCombine(unit.id);
   session.purchased.push({unit, time: elapsed()});
   renderAll();
 }
 
 function checkCombine(uid) {
-  const all = [
-    ...session.bench.map((u,i)=>u?{u,type:'bench',i}:null).filter(Boolean),
-    ...session.board.map((u,i)=>u?{u,type:'board',i}:null).filter(Boolean),
-  ];
-  const matching = all.filter(x => x.u.unit.id === uid && x.u.copies === 1);
-  if (matching.length >= 3) {
-    matching.slice(1,3).forEach(p => {
-      if(p.type==='bench') session.bench[p.i]=null; else session.board[p.i]=null;
-    });
-    matching[0].u.copies = 2;
-    const twoStar = [
-      ...session.bench.map((u,i)=>u&&u.unit.id===uid&&u.copies===2?{u,type:'bench',i}:null).filter(Boolean),
-      ...session.board.map((u,i)=>u&&u.unit.id===uid&&u.copies===2?{u,type:'board',i}:null).filter(Boolean),
+  // Keep combining until stable (handles cascades: 3×1★→2★, then if 3×2★→3★)
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const all = [
+      ...session.bench.map((u,i)=>u?{u,type:'bench',i}:null).filter(Boolean),
+      ...session.board.map((u,i)=>u?{u,type:'board',i}:null).filter(Boolean),
     ];
-    if (twoStar.length >= 3) {
-      twoStar.slice(1,3).forEach(p => {
+    // Check 1★ combine (3×1★ → 1×2★)
+    const oneStars = all.filter(x => x.u.unit.id === uid && x.u.copies === 1);
+    if (oneStars.length >= 3) {
+      // Remove 2nd and 3rd copies
+      oneStars.slice(1,3).forEach(p => {
         if(p.type==='bench') session.bench[p.i]=null; else session.board[p.i]=null;
       });
-      twoStar[0].u.copies = 3;
+      oneStars[0].u.copies = 2;
+      changed = true;
+      continue;
+    }
+    // Check 2★ combine (3×2★ → 1×3★)
+    const twoStars = all.filter(x => x.u.unit.id === uid && x.u.copies === 2);
+    if (twoStars.length >= 3) {
+      twoStars.slice(1,3).forEach(p => {
+        if(p.type==='bench') session.bench[p.i]=null; else session.board[p.i]=null;
+      });
+      twoStars[0].u.copies = 3;
+      changed = true;
     }
   }
 }
@@ -819,7 +947,7 @@ function makeToken(placed) {
   const img = document.createElement('img');
   img.src = tileUrl(placed.unit);
   img.alt = placed.unit.displayName;
-  img.onerror = () => { img.style.display='none'; };
+  img.onerror = () => { img.src = squareUrl(placed.unit); img.onerror = ()=>{ img.style.display='none'; }; };
   div.appendChild(img);
   const label = document.createElement('div');
   label.className = 'unit-token-label';
@@ -857,7 +985,7 @@ function renderShop() {
       }
       const img = document.createElement('img');
       img.className = 'shop-art'; img.src = tileUrl(unit); img.alt = unit.displayName;
-      img.onerror = () => { img.style.background='var(--bg-4)'; img.style.display='none'; };
+      img.onerror = () => { img.src = squareUrl(unit); img.onerror=()=>{ img.style.background='var(--bg-4)'; img.style.display='none'; }; };
       div.appendChild(img);
       const info = document.createElement('div');
       info.className = 'shop-info';
@@ -918,24 +1046,83 @@ function renderTraits() {
 function renderSidebarPlanner() {
   const el = document.getElementById('sidebar-planner');
   el.innerHTML = '';
+
   if (!session.cfg.plannerIds.length) {
     const e = document.createElement('div'); e.className='sidebar-empty';
     e.textContent='No targets (free roll)'; el.appendChild(e); return;
   }
+
+  // Compute trait synergies from planner units
+  const traitCounts = {};
   session.cfg.plannerIds.forEach(id => {
     const unit = UNITS.find(u => u.id === id);
     if (!unit) return;
-    const row = document.createElement('div'); row.className='planner-unit-row';
-    const img = document.createElement('img');
-    img.className='planner-unit-icon'; img.src=tileUrl(unit); img.alt=unit.displayName;
-    img.onerror=()=>{ img.style.display='none'; };
-    row.appendChild(img);
-    const nm = document.createElement('div'); nm.className='planner-unit-name'; nm.textContent=unit.displayName;
-    row.appendChild(nm);
-    const cost = document.createElement('div'); cost.className=`planner-unit-cost c${unit.cost}`; cost.textContent=unit.cost;
-    row.appendChild(cost);
-    el.appendChild(row);
+    unit.traits.forEach(t => { traitCounts[t] = (traitCounts[t]||0) + 1; });
   });
+  const activeTraits = Object.entries(traitCounts)
+    .filter(([t, cnt]) => {
+      const bps = TRAIT_BREAKPOINTS[t] || [2];
+      return cnt >= bps[0]; // at least first breakpoint
+    })
+    .sort((a,b) => b[1]-a[1]);
+
+  // Trait synergy rows (above the portrait grid)
+  if (activeTraits.length) {
+    const traitList = document.createElement('div');
+    traitList.className = 'planner-trait-list';
+    activeTraits.forEach(([trait, count]) => {
+      const bps = TRAIT_BREAKPOINTS[trait] || [2,4];
+      const nextBp = bps.find(bp => bp > count) || bps[bps.length-1];
+      const row = document.createElement('div'); row.className = 'planner-trait-row';
+      const icon = document.createElement('div'); icon.className = 'planner-trait-icon';
+      icon.textContent = trait.charAt(0);
+      const nm = document.createElement('div'); nm.className = 'planner-trait-name'; nm.textContent = trait;
+      const frac = document.createElement('div'); frac.className = 'planner-trait-fraction';
+      frac.textContent = `${count}/${nextBp}`;
+      const pips = document.createElement('div'); pips.className = 'trait-pips';
+      bps.forEach(bp => {
+        const pip = document.createElement('div');
+        pip.className = 'trait-pip'+(count>=bp?' active':'');
+        pips.appendChild(pip);
+      });
+      row.appendChild(icon); row.appendChild(nm); row.appendChild(frac); row.appendChild(pips);
+      traitList.appendChild(row);
+    });
+    el.appendChild(traitList);
+  }
+
+  // Portrait grid — 5 per row, up to 10 units (2 rows)
+  const grid = document.createElement('div'); grid.className = 'planner-grid';
+  const slots = [...session.cfg.plannerIds];
+  while (slots.length < 10) slots.push(null); // pad to 10
+
+  slots.forEach((id, idx) => {
+    const slot = document.createElement('div');
+    if (!id) {
+      slot.className = 'planner-slot empty-slot';
+    } else {
+      const unit = UNITS.find(u => u.id === id);
+      if (!unit) { slot.className = 'planner-slot empty-slot'; grid.appendChild(slot); return; }
+      slot.className = `planner-slot cost${unit.cost}`;
+
+      const img = document.createElement('img');
+      img.src = tileUrl(unit); img.alt = unit.displayName;
+      img.onerror = () => { img.src = squareUrl(unit); img.onerror=()=>{}; };
+      slot.appendChild(img);
+
+      const costGem = document.createElement('div'); costGem.className = 'planner-slot-cost';
+      costGem.textContent = unit.cost;
+      slot.appendChild(costGem);
+
+      const nameEl = document.createElement('div'); nameEl.className = 'planner-slot-name';
+      nameEl.textContent = unit.displayName.split(' ')[0];
+      slot.appendChild(nameEl);
+
+      // Remove button on hover (session planner is read-only — no removal during session)
+    }
+    grid.appendChild(slot);
+  });
+  el.appendChild(grid);
 }
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
@@ -1044,7 +1231,7 @@ function renderUnitPicker() {
       const bar = document.createElement('div'); bar.className=`unit-pick-cost-bar c${unit.cost}`;
       const img = document.createElement('img');
       img.className='unit-pick-art'; img.src=tileUrl(unit); img.alt=unit.displayName;
-      img.onerror=()=>{ img.style.background='var(--bg-4)'; img.style.display='none'; };
+      img.onerror=()=>{ img.src=squareUrl(unit); img.onerror=()=>{ img.style.background='var(--bg-4)'; img.style.display='none'; }; };
       const nm = document.createElement('div'); nm.className='unit-pick-name'; nm.textContent=unit.displayName;
       card.appendChild(bar); card.appendChild(img); card.appendChild(nm);
       card.onclick = ()=>togglePlannerUnit(unit.id);
@@ -1068,7 +1255,7 @@ function renderConfigPlanner() {
     const chip = document.createElement('div'); chip.className='planner-chip'; chip.title='Click to remove';
     const img = document.createElement('img');
     img.style.cssText='width:16px;height:16px;border-radius:2px;object-fit:cover;object-position:top;';
-    img.src=tileUrl(unit); img.alt=unit.displayName; img.onerror=()=>{img.style.display='none';};
+    img.src=tileUrl(unit); img.alt=unit.displayName; img.onerror=()=>{ img.src=squareUrl(unit); img.onerror=()=>{img.style.display='none';}; };
     const nm = document.createElement('span'); nm.textContent=unit.displayName.split(' ')[0];
     chip.appendChild(img); chip.appendChild(nm);
     chip.onclick=()=>togglePlannerUnit(id);
