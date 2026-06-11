@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TFT Rolldown Trainer</title>
+<style>
+  :root {
+    --bg: #0B0B0F;
+    --bg-2: #13131A;
+    --bg-3: #1A1A24;
+    --bg-4: #222230;
+    --gold: #C89B3C;
+    --gold-dim: #8A6A28;
+    --text: #E8E4D8;
+    --text-muted: #7A7A8C;
+    --text-dim: #4A4A5E;
+    --border: #2A2A3A;
+    --border-bright: #3A3A50;
+    --cost1: #8A8A8A;
+    --cost2: #35A85A;
+    --cost3: #3A7BD5;
+    --cost4: #9A4FCA;
+    --cost5: #C89B3C;
+    --cost1-bg: #1A1A1A;
+    --cost2-bg: #0D2014;
+    --cost3-bg: #0A1828;
+    --cost4-bg: #1A0D28;
+    --cost5-bg: #221808;
+    --danger: #C0392B;
+    --success: #27AE60;
+    --info: #2980B9;
+    --radius: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+  }
+  input, select {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* ─── TOP BAR ─── */
+  #topbar {
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-logo {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    flex-shrink: 0;
+  }
+  .topbar-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.2;
+    min-width: 60px;
+  }
+  .topbar-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .topbar-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .topbar-value.gold { color: var(--gold); }
+  .topbar-value.timer { color: var(--text); }
+  .topbar-value.timer.urgent { color: #E74C3C; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+  .topbar-value.level { color: #7EC8E3; }
+
+  .xp-bar-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 80px;
+  }
+  .xp-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .xp-bar-fill {
+    height: 100%;
+    background: #7EC8E3;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+  .xp-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .topbar-spacer { flex: 1; }
+  .topbar-btn {
+    padding: 6px 12px;
+    background: var(--bg-3);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+  .topbar-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .topbar-btn.end-session { border-color: var(--danger); color: var(--danger); }
+  .topbar-btn.end-session:hover { background: rgba(192,57,43,0.15); }
+
+  /* ─── MAIN LAYOUT ─── */
+  #app-layout {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    grid-template-rows: 1fr auto;
+    height: calc(100vh - 48px);
+  }
+  #board-area {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 12px 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #sidebar {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    background: var(--bg-2);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px;
+  }
+  #shop-area {
+    grid-column: 1;
+    grid-row: 2;
+    background: var(--bg-2);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+
+  /* ─── HEX BOARD ─── */
+  #board-label, #bench-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .hex-board {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    flex: 1;
+  }
+  .hex-row { display: contents; }
+  .hex-cell {
+    aspect-ratio: 1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s, background 0.15s;
+    max-height: 72px;
+  }
+  .hex-cell:hover { border-color: var(--border-bright); }
+  .hex-cell.selected { border-color: var(--gold) !important; box-shadow: 0 0 0 1px var(--gold); }
+  .hex-cell.valid-drop { border-color: var(--success) !important; background: rgba(39,174,96,0.1); }
+  .hex-cell.occupied { border-color: var(--border-bright); }
+  .hex-cell.dead-zone { background: transparent; border: 1px dashed var(--border); opacity: 0.3; pointer-events: none; }
+
+  /* ─── BENCH ─── */
+  .bench-row {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 4px;
+  }
+  .bench-cell {
+    aspect-ratio: 1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s;
+    max-height: 64px;
+  }
+  .bench-cell:hover { border-color: var(--border-bright); }
+  .bench-cell.selected { border-color: var(--gold) !important; box-shadow: 0 0 0 1px var(--gold); }
+  .bench-cell.occupied { border-color: var(--border-bright); }
+
+  /* ─── UNIT CARD (in board/bench) ─── */
+  .unit-token {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .unit-token img {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+  }
+  .unit-token-label {
+    position: relative;
+    z-index: 2;
+    font-size: 9px;
+    font-weight: 600;
+    text-align: center;
+    color: #fff;
+    background: rgba(0,0,0,0.75);
+    width: 100%;
+    padding: 2px 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .unit-token-star {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    z-index: 3;
+  }
+  .unit-token-cost-gem {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: 700;
+  }
+  .planner-indicator {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--gold);
+    z-index: 3;
+  }
+
+  /* ─── SHOP ─── */
+  .shop-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .shop-action-btn {
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.02em;
+  }
+  .shop-action-btn .kbd {
+    font-size: 10px;
+    background: rgba(255,255,255,0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 400;
+  }
+  .btn-reroll {
+    background: rgba(200,155,60,0.12);
+    border-color: var(--gold-dim);
+    color: var(--gold);
+  }
+  .btn-reroll:hover:not(:disabled) { background: rgba(200,155,60,0.22); border-color: var(--gold); }
+  .btn-buyxp {
+    background: rgba(58,123,213,0.1);
+    border-color: #1E5FA0;
+    color: #7EC8E3;
+  }
+  .btn-buyxp:hover:not(:disabled) { background: rgba(58,123,213,0.2); border-color: #3A7BD5; }
+  .shop-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .shop-slots {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+  .shop-slot {
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.1s, box-shadow 0.1s;
+    border: 2px solid transparent;
+    aspect-ratio: 0.72;
+  }
+  .shop-slot:hover:not(.empty) { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+  .shop-slot.empty {
+    background: var(--bg-3);
+    border: 1px dashed var(--border);
+    cursor: default;
+  }
+  .shop-slot.cost1 { border-color: var(--cost1); background: var(--cost1-bg); }
+  .shop-slot.cost2 { border-color: var(--cost2); background: var(--cost2-bg); }
+  .shop-slot.cost3 { border-color: var(--cost3); background: var(--cost3-bg); }
+  .shop-slot.cost4 { border-color: var(--cost4); background: var(--cost4-bg); }
+  .shop-slot.cost5 { border-color: var(--cost5); background: var(--cost5-bg); }
+  .shop-slot.is-target { box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(200,155,60,0.4); }
+
+  .shop-art {
+    width: 100%;
+    height: 70%;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+    background: var(--bg-4);
+  }
+  .shop-art-placeholder {
+    width: 100%;
+    height: 70%;
+    background: var(--bg-4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 20px;
+  }
+  .shop-info {
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .shop-name {
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+  .shop-cost-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .cost-gem {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .cost-gem.c1 { background: var(--cost1); color: #000; }
+  .cost-gem.c2 { background: var(--cost2); color: #fff; }
+  .cost-gem.c3 { background: var(--cost3); color: #fff; }
+  .cost-gem.c4 { background: var(--cost4); color: #fff; }
+  .cost-gem.c5 { background: var(--cost5); color: #000; }
+  .cost-text {
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .cost-text.c1 { color: var(--cost1); }
+  .cost-text.c2 { color: var(--cost2); }
+  .cost-text.c3 { color: var(--cost3); }
+  .cost-text.c4 { color: var(--cost4); }
+  .cost-text.c5 { color: var(--cost5); }
+  .shop-target-star {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    background: var(--gold);
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: #000;
+    font-weight: 700;
+    z-index: 2;
+  }
+
+  /* ─── SIDEBAR / TEAM PLANNER ─── */
+  .sidebar-section {
+    margin-bottom: 16px;
+  }
+  .sidebar-title {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .trait-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: var(--radius);
+    margin-bottom: 3px;
+    background: var(--bg-3);
+  }
+  .trait-name {
+    font-size: 12px;
+    flex: 1;
+    color: var(--text);
+  }
+  .trait-count {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--gold);
+  }
+  .trait-pips {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+  .trait-pip {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-bright);
+  }
+  .trait-pip.active { background: var(--gold); }
+  .trait-pip.next { background: var(--text-dim); }
+
+  .planner-units {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .planner-unit-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    background: var(--bg-3);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+  .planner-unit-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    object-fit: cover;
+    object-position: top center;
+    flex-shrink: 0;
+    background: var(--bg-4);
+  }
+  .planner-unit-name {
+    font-size: 11px;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .planner-unit-cost {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .planner-unit-cost.c1 { background: var(--cost1); color: #000; }
+  .planner-unit-cost.c2 { background: var(--cost2); color: #fff; }
+  .planner-unit-cost.c3 { background: var(--cost3); color: #fff; }
+  .planner-unit-cost.c4 { background: var(--cost4); color: #fff; }
+  .planner-unit-cost.c5 { background: var(--cost5); color: #000; }
+  .planner-remove {
+    font-size: 14px;
+    color: var(--text-dim);
+    padding: 0 2px;
+    transition: color 0.15s;
+  }
+  .planner-remove:hover { color: var(--danger); }
+
+  .sidebar-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+    text-align: center;
+    padding: 12px 0;
+  }
+
+  /* ─── CONFIG SCREEN ─── */
+  #config-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .config-panel {
+    background: var(--bg-2);
+    border: 1px solid var(--border-bright);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 900px;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .config-left {
+    padding: 32px;
+    border-right: 1px solid var(--border);
+  }
+  .config-right {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+  }
+  .config-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .config-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+  }
+  .config-field {
+    margin-bottom: 20px;
+  }
+  .config-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: block;
+  }
+  .config-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .config-choice {
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-bright);
+    background: var(--bg-3);
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .config-choice:hover { border-color: var(--gold-dim); color: var(--text); }
+  .config-choice.selected { border-color: var(--gold); background: rgba(200,155,60,0.12); color: var(--gold); font-weight: 600; }
+
+  .config-range-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  input[type="range"] {
+    flex: 1;
+    accent-color: var(--gold);
+    height: 4px;
+  }
+  .config-range-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gold);
+    min-width: 36px;
+    text-align: right;
+  }
+
+  .config-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--gold);
+  }
+
+  .config-start-btn {
+    margin-top: auto;
+    padding: 14px;
+    background: var(--gold);
+    color: #000;
+    border-radius: var(--radius);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+  .config-start-btn:hover { background: #E8B84C; transform: translateY(-1px); }
+
+  /* ─── UNIT PICKER (in config) ─── */
+  .unit-picker-search {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-3);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 13px;
+    margin-bottom: 10px;
+    outline: none;
+  }
+  .unit-picker-search:focus { border-color: var(--gold-dim); }
+  .unit-picker-filters {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .unit-filter-btn {
+    padding: 4px 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-bright);
+    background: var(--bg-3);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--text-muted);
+  }
+  .unit-filter-btn.active { border-color: var(--gold); color: var(--gold); }
+  .unit-filter-btn.fc1.active { border-color: var(--cost1); color: var(--cost1); }
+  .unit-filter-btn.fc2.active { border-color: var(--cost2); color: var(--cost2); }
+  .unit-filter-btn.fc3.active { border-color: var(--cost3); color: var(--cost3); }
+  .unit-filter-btn.fc4.active { border-color: var(--cost4); color: var(--cost4); }
+  .unit-filter-btn.fc5.active { border-color: var(--cost5); color: var(--cost5); }
+
+  .unit-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+    gap: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 4px;
+    flex: 1;
+  }
+  .unit-picker-grid::-webkit-scrollbar { width: 4px; }
+  .unit-picker-grid::-webkit-scrollbar-track { background: transparent; }
+  .unit-picker-grid::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+  .unit-pick-card {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.12s;
+    background: var(--bg-3);
+    position: relative;
+  }
+  .unit-pick-card:hover { border-color: var(--border-bright); transform: translateY(-1px); }
+  .unit-pick-card.selected { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+  .unit-pick-card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: var(--gold);
+    color: #000;
+    font-size: 9px;
+    font-weight: 700;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 14px;
+    text-align: center;
+  }
+  .unit-pick-art {
+    width: 100%;
+    aspect-ratio: 0.85;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+    background: var(--bg-4);
+  }
+  .unit-pick-name {
+    font-size: 9px;
+    font-weight: 600;
+    text-align: center;
+    padding: 3px 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .unit-pick-cost-bar {
+    height: 3px;
+  }
+  .unit-pick-cost-bar.c1 { background: var(--cost1); }
+  .unit-pick-cost-bar.c2 { background: var(--cost2); }
+  .unit-pick-cost-bar.c3 { background: var(--cost3); }
+  .unit-pick-cost-bar.c4 { background: var(--cost4); }
+  .unit-pick-cost-bar.c5 { background: var(--cost5); }
+
+  /* ─── POST-SESSION SUMMARY ─── */
+  #summary-screen {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .summary-panel {
+    background: var(--bg-2);
+    border: 1px solid var(--border-bright);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 680px;
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 32px;
+  }
+  .summary-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 24px;
+    letter-spacing: 0.05em;
+  }
+  .summary-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .summary-stat {
+    background: var(--bg-3);
+    border-radius: var(--radius);
+    padding: 14px;
+    text-align: center;
+  }
+  .summary-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--gold);
+    display: block;
+  }
+  .summary-stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-top: 4px;
+    display: block;
+  }
+  .summary-section-title {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    margin-top: 20px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .summary-missed {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .summary-missed-unit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(192,57,43,0.15);
+    border: 1px solid rgba(192,57,43,0.4);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .summary-missed-unit img {
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    object-fit: cover;
+    object-position: top;
+  }
+  .summary-purchased-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .summary-purchased-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    background: var(--bg-3);
+    border-radius: var(--radius);
+    font-size: 12px;
+  }
+  .summary-purchased-item img {
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    object-fit: cover;
+    object-position: top;
+  }
+  .summary-time-tag {
+    margin-left: auto;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .summary-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 28px;
+  }
+  .summary-btn {
+    flex: 1;
+    padding: 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid;
+    transition: all 0.15s;
+    letter-spacing: 0.03em;
+  }
+  .summary-btn.primary { background: var(--gold); border-color: var(--gold); color: #000; }
+  .summary-btn.primary:hover { background: #E8B84C; }
+  .summary-btn.secondary { border-color: var(--border-bright); color: var(--text-muted); }
+  .summary-btn.secondary:hover { border-color: var(--text-muted); color: var(--text); }
+
+  /* ─── KEYBIND HINT ─── */
+  .keybind-hints {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-left: auto;
+  }
+  .keybind-hint {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .kbd-key {
+    background: var(--bg-4);
+    border: 1px solid var(--border-bright);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--text-muted);
+  }
+
+  /* ─── SCROLLBARS ─── */
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-track { background: transparent; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+  /* ─── RESPONSIVE CLAMP ─── */
+  @media (max-height: 700px) {
+    .hex-board { gap: 2px; }
+    .hex-cell { max-height: 56px; }
+    .bench-cell { max-height: 52px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="config-screen">
+  <div class="config-panel">
+    <div class="config-left">
+      <div class="config-title">TFT ROLLDOWN TRAINER</div>
+      <div class="config-subtitle">Set 17 · Muscle Memory Mode</div>
+
+      <div class="config-field">
+        <label class="config-label">Player Level</label>
+        <div class="config-row" id="level-chooser"></div>
+      </div>
+
+      <div class="config-field">
+        <label class="config-label">Starting Gold</label>
+        <div class="config-range-row">
+          <input type="range" id="gold-range" min="10" max="100" value="50" step="5">
+          <span class="config-range-value" id="gold-range-val">50g</span>
+        </div>
+      </div>
+
+      <div class="config-field">
+        <label class="config-label">Roll Timer</label>
+        <div class="config-row" id="timer-chooser"></div>
+      </div>
+
+      <div class="config-field">
+        <div class="config-checkbox-row">
+          <input type="checkbox" id="show-stats-chk" checked>
+          <label for="show-stats-chk" style="font-size:13px;color:var(--text-muted);cursor:pointer;">Show post-session stats</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-right">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">
+        Team Planner <span style="color:var(--text-dim);font-size:11px;">(up to 10 units)</span>
+      </div>
+      <input class="unit-picker-search" id="unit-search" type="text" placeholder="Search units…">
+      <div class="unit-picker-filters" id="cost-filters"></div>
+      <div class="unit-picker-grid" id="unit-picker-grid"></div>
+
+      <div style="margin-top:14px;margin-bottom:auto;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;">Selected (<span id="planner-count">0</span>/10)</div>
+        <div id="config-planner-list" style="display:flex;flex-wrap:wrap;gap:5px;min-height:32px;"></div>
+      </div>
+
+      <button class="config-start-btn" id="start-btn" onclick="startSession()">
+        Start Rolldown →
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="summary-screen" style="display:none;">
+  <div class="summary-panel">
+    <div class="summary-title">SESSION COMPLETE</div>
+    <div class="summary-stats" id="summary-stats"></div>
+    <div class="summary-section-title">Missed Target Units</div>
+    <div class="summary-missed" id="summary-missed"></div>
+    <div class="summary-section-title">Units Purchased</div>
+    <div class="summary-purchased-list" id="summary-purchased-list"></div>
+    <div class="summary-actions">
+      <button class="summary-btn secondary" onclick="showConfig()">Configure New Session</button>
+      <button class="summary-btn primary" onclick="restartSameConfig()">Roll Again →</button>
+    </div>
+  </div>
+</div>
+
+<div id="topbar">
+  <div class="topbar-logo">ROLLDOWN<br>TRAINER</div>
+  <div class="topbar-stat">
+    <span class="topbar-label">Level</span>
+    <span class="topbar-value level" id="hud-level">8</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="topbar-label">Gold</span>
+    <span class="topbar-value gold" id="hud-gold">50</span>
+  </div>
+  <div class="topbar-stat xp-bar-wrap">
+    <span class="topbar-label">XP</span>
+    <div class="xp-bar"><div class="xp-bar-fill" id="hud-xp-bar" style="width:0%"></div></div>
+    <span class="xp-label" id="hud-xp-label">0 / 0</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="topbar-label">Timer</span>
+    <span class="topbar-value timer" id="hud-timer">0:30</span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="keybind-hints">
+    <div class="keybind-hint"><span class="kbd-key">D</span> Reroll</div>
+    <div class="keybind-hint"><span class="kbd-key">F</span> Buy XP</div>
+    <div class="keybind-hint"><span class="kbd-key">W</span> Board/Bench</div>
+    <div class="keybind-hint"><span class="kbd-key">E</span> Sell</div>
+  </div>
+  <button class="topbar-btn end-session" onclick="endSession()">End Session</button>
+</div>
+
+<div id="app-layout">
+  <div id="board-area">
+    <div id="board-label" class="board-label">Board (<span id="board-count">0</span>/<span id="board-cap">8</span>)</div>
+    <div class="hex-board" id="hex-board"></div>
+    <div id="bench-label" class="bench-label">Bench (<span id="bench-count">0</span>/9)</div>
+    <div class="bench-row" id="bench-row"></div>
+  </div>
+
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Trait Synergies</div>
+      <div id="trait-display"></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Team Planner</div>
+      <div class="planner-units" id="sidebar-planner"></div>
+    </div>
+  </div>
+
+  <div id="shop-area">
+    <div class="shop-controls">
+      <button class="shop-action-btn btn-reroll" id="btn-reroll" onclick="doReroll()">
+        <span class="kbd">D</span> Reroll <span style="color:var(--gold-dim);font-size:11px;">(2g)</span>
+      </button>
+      <button class="shop-action-btn btn-buyxp" id="btn-buyxp" onclick="doBuyXP()">
+        <span class="kbd">F</span> Buy XP <span style="color:#3A7BD5;font-size:11px;">(4g)</span>
+      </button>
+    </div>
+    <div class="shop-slots" id="shop-slots"></div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+
+const UNITS = [
+  // 1-cost
+  {id:'aatrox',displayName:"Aatrox",cost:1,traits:["Arbiter","Vanguard"],imageUrl:"https://cdn.communitydragon.org/latest/champion/aatrox/splash-art/centered/skin/0"},
+  {id:'briar',displayName:"Briar",cost:1,traits:["Reveler","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/briar/splash-art/centered/skin/0"},
+  {id:'caitlyn',displayName:"Caitlyn",cost:1,traits:["Enforcer","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/caitlyn/splash-art/centered/skin/0"},
+  {id:'chogath',displayName:"Cho'Gath",cost:1,traits:["Rift Herald","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/chogath/splash-art/centered/skin/0"},
+  {id:'ezreal',displayName:"Ezreal",cost:1,traits:["Timebreaker","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/ezreal/splash-art/centered/skin/0"},
+  {id:'leona',displayName:"Leona",cost:1,traits:["Enforcer","Vanguard"],imageUrl:"https://cdn.communitydragon.org/latest/champion/leona/splash-art/centered/skin/0"},
+  {id:'lissandra',displayName:"Lissandra",cost:1,traits:["Frost","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/lissandra/splash-art/centered/skin/0"},
+  {id:'nasus',displayName:"Nasus",cost:1,traits:["Rift Herald","Vanguard"],imageUrl:"https://cdn.communitydragon.org/latest/champion/nasus/splash-art/centered/skin/0"},
+  {id:'poppy',displayName:"Poppy",cost:1,traits:["Reveler","Vanguard"],imageUrl:"https://cdn.communitydragon.org/latest/champion/poppy/splash-art/centered/skin/0"},
+  {id:'reksai',displayName:"Rek'Sai",cost:1,traits:["Rift Herald","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/reksai/splash-art/centered/skin/0"},
+  {id:'talon',displayName:"Talon",cost:1,traits:["Enforcer","Assassin"],imageUrl:"https://cdn.communitydragon.org/latest/champion/talon/splash-art/centered/skin/0"},
+  {id:'teemo',displayName:"Teemo",cost:1,traits:["Reveler","Trickster"],imageUrl:"https://cdn.communitydragon.org/latest/champion/teemo/splash-art/centered/skin/0"},
+  {id:'twistedfate',displayName:"Twisted Fate",cost:1,traits:["Timebreaker","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/twistedfate/splash-art/centered/skin/0"},
+  {id:'veigar',displayName:"Veigar",cost:1,traits:["Reveler","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/veigar/splash-art/centered/skin/0"},
+  // 2-cost
+  {id:'akali',displayName:"Akali",cost:2,traits:["Rebel","Assassin"],imageUrl:"https://cdn.communitydragon.org/latest/champion/akali/splash-art/centered/skin/0"},
+  {id:'belveth',displayName:"Bel'Veth",cost:2,traits:["Rift Herald","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/belveth/splash-art/centered/skin/0"},
+  {id:'gnar',displayName:"Gnar",cost:2,traits:["Timebreaker","Shapeshifter"],imageUrl:"https://cdn.communitydragon.org/latest/champion/gnar/splash-art/centered/skin/0"},
+  {id:'gragas',displayName:"Gragas",cost:2,traits:["Reveler","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/gragas/splash-art/centered/skin/0"},
+  {id:'gwen',displayName:"Gwen",cost:2,traits:["Frost","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/gwen/splash-art/centered/skin/0"},
+  {id:'jax',displayName:"Jax",cost:2,traits:["Timebreaker","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/jax/splash-art/centered/skin/0"},
+  {id:'jinx',displayName:"Jinx",cost:2,traits:["Rebel","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/jinx/splash-art/centered/skin/0"},
+  {id:'meepsie',displayName:"Meepsie",cost:2,traits:["Reveler","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/yuumi/splash-art/centered/skin/0"},
+  {id:'milio',displayName:"Milio",cost:2,traits:["Reveler","Scholar"],imageUrl:"https://cdn.communitydragon.org/latest/champion/milio/splash-art/centered/skin/0"},
+  {id:'mordekaiser',displayName:"Mordekaiser",cost:2,traits:["Rift Herald","Vanguard"],imageUrl:"https://cdn.communitydragon.org/latest/champion/mordekaiser/splash-art/centered/skin/0"},
+  {id:'pantheon',displayName:"Pantheon",cost:2,traits:["Arbiter","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/pantheon/splash-art/centered/skin/0"},
+  {id:'pyke',displayName:"Pyke",cost:2,traits:["Enforcer","Assassin"],imageUrl:"https://cdn.communitydragon.org/latest/champion/pyke/splash-art/centered/skin/0"},
+  {id:'zoe',displayName:"Zoe",cost:2,traits:["Rebel","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/zoe/splash-art/centered/skin/0"},
+  // 3-cost
+  {id:'aurora',displayName:"Aurora",cost:3,traits:["Frost","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/aurora/splash-art/centered/skin/0"},
+  {id:'diana',displayName:"Diana",cost:3,traits:["Frost","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/diana/splash-art/centered/skin/0"},
+  {id:'fizz',displayName:"Fizz",cost:3,traits:["Reveler","Trickster"],imageUrl:"https://cdn.communitydragon.org/latest/champion/fizz/splash-art/centered/skin/0"},
+  {id:'illaoi',displayName:"Illaoi",cost:3,traits:["Rift Herald","Bastion"],imageUrl:"https://cdn.communitydragon.org/latest/champion/illaoi/splash-art/centered/skin/0"},
+  {id:'kaisa',displayName:"Kai'Sa",cost:3,traits:["Rebel","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/kaisa/splash-art/centered/skin/0"},
+  {id:'lulu',displayName:"Lulu",cost:3,traits:["Reveler","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/lulu/splash-art/centered/skin/0"},
+  {id:'maokai',displayName:"Maokai",cost:3,traits:["Rift Herald","Bastion"],imageUrl:"https://cdn.communitydragon.org/latest/champion/maokai/splash-art/centered/skin/0"},
+  {id:'missfortune',displayName:"Miss Fortune",cost:3,traits:["Rebel","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/missfortune/splash-art/centered/skin/0"},
+  {id:'ornn',displayName:"Ornn",cost:3,traits:["Arbiter","Vanguard"],imageUrl:"https://cdn.communitydragon.org/latest/champion/ornn/splash-art/centered/skin/0"},
+  {id:'rhaast',displayName:"Rhaast",cost:3,traits:["Rebel","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/kayn/splash-art/centered/skin/0"},
+  {id:'samira',displayName:"Samira",cost:3,traits:["Enforcer","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/samira/splash-art/centered/skin/0"},
+  {id:'urgot',displayName:"Urgot",cost:3,traits:["Enforcer","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/urgot/splash-art/centered/skin/0"},
+  {id:'viktor',displayName:"Viktor",cost:3,traits:["Rebel","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/viktor/splash-art/centered/skin/0"},
+  // 4-cost
+  {id:'aurelionsol',displayName:"Aurelion Sol",cost:4,traits:["Rift Herald","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/aurelionsol/splash-art/centered/skin/0"},
+  {id:'corki',displayName:"Corki",cost:4,traits:["Rebel","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/corki/splash-art/centered/skin/0"},
+  {id:'mightymech',displayName:"The Mighty Mech",cost:4,traits:["Timebreaker","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/rumble/splash-art/centered/skin/0"},
+  {id:'karma',displayName:"Karma",cost:4,traits:["Arbiter","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/karma/splash-art/centered/skin/0"},
+  {id:'kindred',displayName:"Kindred",cost:4,traits:["Arbiter","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/kindred/splash-art/centered/skin/0"},
+  {id:'leblanc',displayName:"LeBlanc",cost:4,traits:["Enforcer","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/leblanc/splash-art/centered/skin/0"},
+  {id:'masteryi',displayName:"Master Yi",cost:4,traits:["Timebreaker","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/masteryi/splash-art/centered/skin/0"},
+  {id:'morgana',displayName:"Morgana",cost:4,traits:["Arbiter","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/morgana/splash-art/centered/skin/0"},
+  {id:'nami',displayName:"Nami",cost:4,traits:["Reveler","Scholar"],imageUrl:"https://cdn.communitydragon.org/latest/champion/nami/splash-art/centered/skin/0"},
+  {id:'nunuwillump',displayName:"Nunu & Willump",cost:4,traits:["Frost","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/nunu/splash-art/centered/skin/0"},
+  {id:'rammus',displayName:"Rammus",cost:4,traits:["Rebel","Bastion"],imageUrl:"https://cdn.communitydragon.org/latest/champion/rammus/splash-art/centered/skin/0"},
+  {id:'riven',displayName:"Riven",cost:4,traits:["Arbiter","Bruiser"],imageUrl:"https://cdn.communitydragon.org/latest/champion/riven/splash-art/centered/skin/0"},
+  {id:'tahmkench',displayName:"Tahm Kench",cost:4,traits:["Reveler","Bastion"],imageUrl:"https://cdn.communitydragon.org/latest/champion/tahmkench/splash-art/centered/skin/0"},
+  {id:'xayah',displayName:"Xayah",cost:4,traits:["Rebel","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/xayah/splash-art/centered/skin/0"},
+  // 5-cost
+  {id:'bard',displayName:"Bard",cost:5,traits:["Timebreaker","Scholar"],imageUrl:"https://cdn.communitydragon.org/latest/champion/bard/splash-art/centered/skin/0"},
+  {id:'blitzcrank',displayName:"Blitzcrank",cost:5,traits:["Timebreaker","Vanguard"],imageUrl:"https://cdn.communitydragon.org/latest/champion/blitzcrank/splash-art/centered/skin/0"},
+  {id:'fiora',displayName:"Fiora",cost:5,traits:["Arbiter","Slayer"],imageUrl:"https://cdn.communitydragon.org/latest/champion/fiora/splash-art/centered/skin/0"},
+  {id:'graves',displayName:"Graves",cost:5,traits:["Enforcer","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/graves/splash-art/centered/skin/0"},
+  {id:'jhin',displayName:"Jhin",cost:5,traits:["Rebel","Sniper"],imageUrl:"https://cdn.communitydragon.org/latest/champion/jhin/splash-art/centered/skin/0"},
+  {id:'shen',displayName:"Shen",cost:5,traits:["Arbiter","Bastion"],imageUrl:"https://cdn.communitydragon.org/latest/champion/shen/splash-art/centered/skin/0"},
+  {id:'sona',displayName:"Sona",cost:5,traits:["Reveler","Scholar"],imageUrl:"https://cdn.communitydragon.org/latest/champion/sona/splash-art/centered/skin/0"},
+  {id:'vex',displayName:"Vex",cost:5,traits:["Frost","Arcanist"],imageUrl:"https://cdn.communitydragon.org/latest/champion/vex/splash-art/centered/skin/0"},
+  {id:'zed',displayName:"Zed",cost:5,traits:["Timebreaker","Assassin"],imageUrl:"https://cdn.communitydragon.org/latest/champion/zed/splash-art/centered/skin/0"},
+];
+
+const POOL_SIZES = {1:30, 2:25, 3:18, 4:10, 5:9};
+
+const ODDS = {
+  1:  [1.00, 0.00, 0.00, 0.00, 0.00],
+  2:  [1.00, 0.00, 0.00, 0.00, 0.00],
+  3:  [0.75, 0.25, 0.00, 0.00, 0.00],
+  4:  [0.55, 0.30, 0.15, 0.00, 0.00],
+  5:  [0.45, 0.33, 0.20, 0.02, 0.00],
+  6:  [0.30, 0.40, 0.25, 0.05, 0.00],
+  7:  [0.19, 0.30, 0.35, 0.10, 0.01],
+  8:  [0.18, 0.25, 0.32, 0.22, 0.03],
+  9:  [0.10, 0.20, 0.25, 0.35, 0.10],
+  10: [0.05, 0.10, 0.20, 0.40, 0.25],
+};
+
+const XP_TO_LEVEL = {
+  1: 0, 2: 2, 3: 6, 4: 10, 5: 20, 6: 36, 7: 56, 8: 80, 9: 100, 10: Infinity
+};
+const XP_THRESHOLDS = [0, 2, 6, 10, 20, 36, 56, 80, 100];
+
+const TRAIT_BREAKPOINTS = {
+  "Arbiter": [2,4,6], "Vanguard": [2,4,6,8], "Reveler": [2,4,6,8],
+  "Enforcer": [2,4,6], "Bruiser": [2,4,6,8], "Assassin": [2,4,6],
+  "Sniper": [2,4,6], "Timebreaker": [2,3,4], "Arcanist": [2,4,6,8],
+  "Frost": [2,4,6,8], "Rift Herald": [2,4,6], "Slayer": [2,4,6],
+  "Rebel": [3,5,7,9], "Scholar": [2,4,6], "Bastion": [2,4,6,8],
+  "Shapeshifter": [2,4,6], "Trickster": [2,3,4],
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+
+let config = {
+  level: 8, gold: 50, timerMode: 30, showStats: true, plannerIds: []
+};
+
+let session = null; // null when not active
+
+function newSession(cfg) {
+  const pool = {};
+  UNITS.forEach(u => { pool[u.id] = POOL_SIZES[u.cost]; });
+  const xpNeeded = XP_THRESHOLDS[cfg.level] || 0;
+  return {
+    cfg: {...cfg},
+    gold: cfg.gold,
+    level: cfg.level,
+    xp: xpNeeded,
+    pool,
+    // 28 board cells (4 rows × 7 cols)
+    board: Array(28).fill(null),
+    bench: Array(9).fill(null),
+    shop: Array(5).fill(null),
+    shopReserved: {}, // unitId -> count temporarily held
+    selected: null, // {type:'bench'|'board', idx}
+    timerLeft: cfg.timerMode === 'unlimited' ? null : cfg.timerMode,
+    timerInterval: null,
+    startTime: Date.now(),
+    // metrics
+    rollCount: 0,
+    firstRollTime: null,
+    lastRollTime: null,
+    purchased: [], // [{unit, time}]
+    missedTargets: [],
+    ended: false,
+  };
+}
+
+// ── CDN IMAGE HELPER ──────────────────────────────────────────────────────────
+function imgUrl(unit) {
+  return unit.imageUrl;
+}
+
+function imgEl(unit, cls='') {
+  const img = document.createElement('img');
+  img.src = imgUrl(unit);
+  img.alt = unit.displayName;
+  if (cls) img.className = cls;
+  img.onerror = () => { img.style.display='none'; };
+  return img;
+}
+
+// ── SHOP SIMULATION ───────────────────────────────────────────────────────────
+
+function costColor(cost) {
+  return ['','c1','c2','c3','c4','c5'][cost];
+}
+
+function rollShop() {
+  if (!session) return;
+  // Return reserved units to pool
+  Object.entries(session.shopReserved).forEach(([id, cnt]) => {
+    session.pool[id] = (session.pool[id] || 0) + cnt;
+  });
+  session.shopReserved = {};
+
+  // Track missed targets before clearing shop
+  if (session.rollCount > 0) {
+    session.shop.forEach(unit => {
+      if (!unit) return;
+      const isTarget = session.cfg.plannerIds.includes(unit.id);
+      if (isTarget) {
+        session.missedTargets.push({unit, time: elapsed()});
+      }
+    });
+  }
+
+  const newShop = [];
+  const levelOdds = ODDS[session.level];
+  const costTiers = [1,2,3,4,5];
+
+  for (let i = 0; i < 5; i++) {
+    const roll = Math.random();
+    let cum = 0, costTier = 1;
+    for (let t = 0; t < 5; t++) {
+      cum += levelOdds[t];
+      if (roll < cum) { costTier = t+1; break; }
+    }
+    const unitDraw = drawFromTier(costTier);
+    newShop.push(unitDraw);
+    if (unitDraw) {
+      session.shopReserved[unitDraw.id] = (session.shopReserved[unitDraw.id] || 0) + 1;
+      session.pool[unitDraw.id]--;
+    }
+  }
+  session.shop = newShop;
+
+  const now = Date.now();
+  if (!session.firstRollTime) session.firstRollTime = now;
+  session.lastRollTime = now;
+  session.rollCount++;
+}
+
+function drawFromTier(cost) {
+  const eligible = UNITS.filter(u => u.cost === cost && session.pool[u.id] > 0);
+  if (!eligible.length) return null;
+  const total = eligible.reduce((s,u) => s + session.pool[u.id], 0);
+  let r = Math.random() * total, cum = 0;
+  for (const u of eligible) {
+    cum += session.pool[u.id];
+    if (r < cum) return u;
+  }
+  return eligible[eligible.length-1];
+}
+
+function elapsed() {
+  return ((Date.now() - session.startTime) / 1000).toFixed(1);
+}
+
+// ── ECONOMY ───────────────────────────────────────────────────────────────────
+
+function doReroll() {
+  if (!session || session.gold < 2 || session.ended) return;
+  session.gold -= 2;
+  rollShop();
+  renderAll();
+}
+
+function doBuyXP() {
+  if (!session || session.gold < 4 || session.ended) return;
+  if (session.level >= 10) return;
+  session.gold -= 4;
+  session.xp += 4;
+  checkLevelUp();
+  renderAll();
+}
+
+function checkLevelUp() {
+  while (session.level < 10) {
+    const needed = XP_THRESHOLDS[session.level];
+    if (session.xp >= needed) {
+      session.level++;
+    } else break;
+  }
+}
+
+function purchaseUnit(slotIdx) {
+  if (!session || session.ended) return;
+  const unit = session.shop[slotIdx];
+  if (!unit) return;
+  if (session.gold < unit.cost) return;
+
+  // Find bench slot
+  const benchIdx = session.bench.indexOf(null);
+  if (benchIdx === -1) { flashBenchFull(); return; }
+
+  session.gold -= unit.cost;
+  session.shop[slotIdx] = null;
+
+  // Remove from reserved
+  if (session.shopReserved[unit.id]) {
+    session.shopReserved[unit.id]--;
+    if (session.shopReserved[unit.id] === 0) delete session.shopReserved[unit.id];
+    // pool was already decremented at roll time
+  }
+
+  session.bench[benchIdx] = {unit, copies: 1};
+  checkCombine(session.bench[benchIdx], 'bench', benchIdx);
+  session.purchased.push({unit, time: elapsed()});
+  renderAll();
+}
+
+function checkCombine(placed, type, idx) {
+  // Count all copies on bench + board
+  const uid = placed.unit.id;
+  const allUnits = [
+    ...session.bench.map((u,i) => u ? {u, type:'bench', i} : null).filter(Boolean),
+    ...session.board.map((u,i) => u ? {u, type:'board', i} : null).filter(Boolean),
+  ];
+  const matching = allUnits.filter(x => x.u.unit.id === uid);
+  if (matching.length >= 3 && matching[0].u.copies === 1) {
+    // Combine into 2-star
+    const positions = matching.slice(0,3);
+    positions.slice(1).forEach(p => {
+      if (p.type === 'bench') session.bench[p.i] = null;
+      else session.board[p.i] = null;
+    });
+    positions[0].u.copies = 2;
+    // Check 3-star (9 copies total, but simplified: 3×2-star)
+    const twoStars = [...session.bench, ...session.board].filter(u => u && u.unit.id === uid && u.copies === 2);
+    if (twoStars.length >= 3) {
+      const pos2 = [
+        ...session.bench.map((u,i) => u && u.unit.id === uid && u.copies===2 ? {u,type:'bench',i} : null).filter(Boolean),
+        ...session.board.map((u,i) => u && u.unit.id === uid && u.copies===2 ? {u,type:'board',i} : null).filter(Boolean),
+      ];
+      pos2.slice(1,3).forEach(p => {
+        if (p.type === 'bench') session.bench[p.i] = null;
+        else session.board[p.i] = null;
+      });
+      pos2[0].u.copies = 3;
+    }
+  }
+}
+
+function flashBenchFull() {
+  const br = document.getElementById('bench-row');
+  br.style.outline = '2px solid var(--danger)';
+  setTimeout(() => { br.style.outline = ''; }, 600);
+}
+
+// ── BOARD / BENCH INTERACTIONS ────────────────────────────────────────────────
+
+function selectUnit(type, idx) {
+  if (!session) return;
+  const unit = type === 'bench' ? session.bench[idx] : session.board[idx];
+  if (!unit) { session.selected = null; renderAll(); return; }
+  if (session.selected && session.selected.type === type && session.selected.idx === idx) {
+    session.selected = null;
+  } else {
+    session.selected = {type, idx};
+  }
+  renderAll();
+}
+
+function doMove() {
+  if (!session || !session.selected) return;
+  const {type, idx} = session.selected;
+  const unit = type === 'bench' ? session.bench[idx] : session.board[idx];
+  if (!unit) { session.selected = null; return; }
+
+  if (type === 'bench') {
+    // Move to board
+    const boardCount = session.board.filter(Boolean).length;
+    if (boardCount >= session.level) return;
+    const emptyBoard = session.board.indexOf(null);
+    if (emptyBoard === -1) return;
+    session.board[emptyBoard] = unit;
+    session.bench[idx] = null;
+    session.selected = {type:'board', idx:emptyBoard};
+  } else {
+    // Move to bench
+    const emptyBench = session.bench.indexOf(null);
+    if (emptyBench === -1) return;
+    session.bench[emptyBench] = unit;
+    session.board[idx] = null;
+    session.selected = {type:'bench', idx:emptyBench};
+  }
+  renderAll();
+}
+
+function doSell() {
+  if (!session || !session.selected) return;
+  const {type, idx} = session.selected;
+  const unit = type === 'bench' ? session.bench[idx] : session.board[idx];
+  if (!unit) return;
+  const refund = unit.unit.cost * unit.copies;
+  session.gold += refund;
+  session.pool[unit.unit.id] = (session.pool[unit.unit.id] || 0) + unit.copies;
+  if (type === 'bench') session.bench[idx] = null;
+  else session.board[idx] = null;
+  session.selected = null;
+  renderAll();
+}
+
+// ── TIMER ─────────────────────────────────────────────────────────────────────
+
+function startTimer() {
+  if (!session || session.timerLeft === null) return;
+  if (session.timerInterval) clearInterval(session.timerInterval);
+  session.timerInterval = setInterval(() => {
+    if (!session || session.ended) { clearInterval(session.timerInterval); return; }
+    session.timerLeft--;
+    renderTimer();
+    if (session.timerLeft <= 0) {
+      clearInterval(session.timerInterval);
+      endSession();
+    }
+  }, 1000);
+}
+
+function renderTimer() {
+  const el = document.getElementById('hud-timer');
+  if (!session || session.timerLeft === null) {
+    el.textContent = '∞';
+    el.classList.remove('urgent');
+    return;
+  }
+  const s = Math.max(0, session.timerLeft);
+  const m = Math.floor(s/60), sec = s%60;
+  el.textContent = `${m}:${sec.toString().padStart(2,'0')}`;
+  el.classList.toggle('urgent', s <= 10);
+}
+
+// ── SESSION LIFECYCLE ─────────────────────────────────────────────────────────
+
+function startSession() {
+  session = newSession(config);
+  rollShop();
+  document.getElementById('config-screen').style.display = 'none';
+  document.getElementById('summary-screen').style.display = 'none';
+  startTimer();
+  renderAll();
+}
+
+function endSession() {
+  if (!session || session.ended) return;
+  session.ended = true;
+  if (session.timerInterval) clearInterval(session.timerInterval);
+  if (!session.cfg.showStats) { showConfig(); return; }
+  showSummary();
+}
+
+function showSummary() {
+  document.getElementById('summary-screen').style.display = 'flex';
+  renderSummary();
+}
+
+function showConfig() {
+  if (session && session.timerInterval) clearInterval(session.timerInterval);
+  session = null;
+  document.getElementById('config-screen').style.display = 'flex';
+  document.getElementById('summary-screen').style.display = 'none';
+}
+
+function restartSameConfig() {
+  document.getElementById('summary-screen').style.display = 'none';
+  startSession();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+
+function renderAll() {
+  if (!session) return;
+  renderHUD();
+  renderBoard();
+  renderBench();
+  renderShop();
+  renderSidebar();
+}
+
+function renderHUD() {
+  document.getElementById('hud-level').textContent = session.level;
+  document.getElementById('hud-gold').textContent = session.gold;
+  renderTimer();
+
+  const curThresh = XP_THRESHOLDS[session.level - 1] || 0;
+  const nextThresh = session.level >= 10 ? session.xp : XP_THRESHOLDS[session.level] || session.xp;
+  const xpCur = session.xp - curThresh;
+  const xpNeeded = nextThresh - curThresh;
+  const pct = session.level >= 10 ? 100 : Math.min(100, (xpCur/xpNeeded)*100);
+  document.getElementById('hud-xp-bar').style.width = pct+'%';
+  document.getElementById('hud-xp-label').textContent = session.level >= 10 ? 'MAX' : `${session.xp}/${nextThresh}`;
+
+  document.getElementById('board-count').textContent = session.board.filter(Boolean).length;
+  document.getElementById('board-cap').textContent = session.level;
+  document.getElementById('bench-count').textContent = session.bench.filter(Boolean).length;
+
+  document.getElementById('btn-reroll').disabled = session.gold < 2;
+  document.getElementById('btn-buyxp').disabled = session.gold < 4 || session.level >= 10;
+}
+
+function renderBoard() {
+  const el = document.getElementById('hex-board');
+  el.innerHTML = '';
+  // 4 rows × 7 cols = 28 cells
+  // rows 0-1 (player side) = rows 2-3 in 0-indexed
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      const idx = r*7 + c;
+      const div = document.createElement('div');
+      div.className = 'hex-cell';
+      const unit = session.board[idx];
+      if (unit) {
+        div.classList.add('occupied');
+        div.appendChild(makeUnitToken(unit));
+        if (session.selected && session.selected.type === 'board' && session.selected.idx === idx) {
+          div.classList.add('selected');
+        }
+        div.onclick = () => selectUnit('board', idx);
+      } else {
+        div.onclick = () => {
+          if (session.selected && session.selected.type === 'bench') {
+            // Drop bench unit here
+            const bi = session.selected.idx;
+            const unit = session.bench[bi];
+            if (!unit) return;
+            const boardCount = session.board.filter(Boolean).length;
+            if (boardCount >= session.level && !session.board[idx]) return;
+            if (!session.board[idx]) {
+              session.board[idx] = unit;
+              session.bench[bi] = null;
+              session.selected = null;
+              renderAll();
+            }
+          } else if (session.selected && session.selected.type === 'board') {
+            // Swap
+            const bi = session.selected.idx;
+            const tmp = session.board[bi];
+            session.board[bi] = session.board[idx];
+            session.board[idx] = tmp;
+            session.selected = null;
+            renderAll();
+          }
+        };
+      }
+      el.appendChild(div);
+    }
+  }
+}
+
+function renderBench() {
+  const el = document.getElementById('bench-row');
+  el.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const div = document.createElement('div');
+    div.className = 'bench-cell';
+    const unit = session.bench[i];
+    if (unit) {
+      div.classList.add('occupied');
+      div.appendChild(makeUnitToken(unit));
+      if (session.selected && session.selected.type === 'bench' && session.selected.idx === i) {
+        div.classList.add('selected');
+      }
+      div.onclick = () => selectUnit('bench', i);
+    } else {
+      div.onclick = () => {
+        if (session.selected && session.selected.type === 'board') {
+          const bi = session.selected.idx;
+          const unit = session.board[bi];
+          if (!unit) return;
+          const emptyBench = session.bench.indexOf(null);
+          if (emptyBench === -1) return;
+          session.bench[i] = unit;
+          session.board[bi] = null;
+          session.selected = null;
+          renderAll();
+        }
+      };
+    }
+    el.appendChild(div);
+  }
+}
+
+function makeUnitToken(placed) {
+  const div = document.createElement('div');
+  div.className = 'unit-token';
+  const img = imgEl(placed.unit, '');
+  img.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:top center;';
+  div.appendChild(img);
+  const label = document.createElement('div');
+  label.className = 'unit-token-label';
+  label.textContent = placed.unit.displayName.split(' ')[0];
+  div.appendChild(label);
+  if (placed.copies > 1) {
+    const star = document.createElement('div');
+    star.className = 'unit-token-star';
+    star.textContent = placed.copies === 2 ? '★★' : '★★★';
+    star.style.color = placed.copies === 3 ? '#FFD700' : '#aaa';
+    div.appendChild(star);
+  }
+  const gem = document.createElement('div');
+  gem.className = `unit-token-cost-gem cost-gem c${placed.unit.cost}`;
+  gem.textContent = placed.unit.cost;
+  div.appendChild(gem);
+  return div;
+}
+
+function renderShop() {
+  const el = document.getElementById('shop-slots');
+  el.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const unit = session.shop[i];
+    const div = document.createElement('div');
+    if (!unit) {
+      div.className = 'shop-slot empty';
+    } else {
+      const isTarget = session.cfg.plannerIds.includes(unit.id);
+      div.className = `shop-slot cost${unit.cost}${isTarget ? ' is-target' : ''}`;
+      if (isTarget) {
+        const star = document.createElement('div');
+        star.className = 'shop-target-star';
+        star.textContent = '★';
+        div.appendChild(star);
+      }
+      const img = imgEl(unit, 'shop-art');
+      div.appendChild(img);
+      const ph = document.createElement('div');
+      ph.className = 'shop-art-placeholder';
+      ph.style.display = 'none';
+      img.onerror = () => { img.style.display='none'; ph.style.display='flex'; ph.textContent='?'; };
+      div.appendChild(ph);
+      const info = document.createElement('div');
+      info.className = 'shop-info';
+      const name = document.createElement('div');
+      name.className = 'shop-name';
+      name.textContent = unit.displayName;
+      info.appendChild(name);
+      const costRow = document.createElement('div');
+      costRow.className = 'shop-cost-row';
+      const gem = document.createElement('div');
+      gem.className = `cost-gem c${unit.cost}`;
+      gem.textContent = unit.cost;
+      const costTxt = document.createElement('div');
+      costTxt.className = `cost-text c${unit.cost}`;
+      costTxt.textContent = `${unit.cost}g`;
+      costRow.appendChild(gem);
+      costRow.appendChild(costTxt);
+      if (session.gold < unit.cost) {
+        costTxt.style.color = 'var(--text-dim)';
+        gem.style.opacity = '0.5';
+      }
+      info.appendChild(costRow);
+      div.appendChild(info);
+      const slotIdx = i;
+      div.onclick = () => purchaseUnit(slotIdx);
+    }
+    el.appendChild(div);
+  }
+}
+
+function renderSidebar() {
+  renderTraits();
+  renderSidebarPlanner();
+}
+
+function computeTraits() {
+  const all = [...session.board, ...session.bench].filter(Boolean);
+  const traitCounts = {};
+  all.forEach(u => {
+    u.unit.traits.forEach(t => { traitCounts[t] = (traitCounts[t]||0) + 1; });
+  });
+  return traitCounts;
+}
+
+function renderTraits() {
+  const el = document.getElementById('trait-display');
+  el.innerHTML = '';
+  const traitCounts = computeTraits();
+  const sorted = Object.entries(traitCounts).sort((a,b) => b[1]-a[1]);
+  if (!sorted.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sidebar-empty';
+    empty.textContent = 'Place units to see traits';
+    el.appendChild(empty);
+    return;
+  }
+  sorted.forEach(([trait, count]) => {
+    const bps = TRAIT_BREAKPOINTS[trait] || [2,4,6];
+    const row = document.createElement('div');
+    row.className = 'trait-row';
+    const name = document.createElement('div');
+    name.className = 'trait-name';
+    name.textContent = trait;
+    const cnt = document.createElement('div');
+    cnt.className = 'trait-count';
+    cnt.textContent = count;
+    const pips = document.createElement('div');
+    pips.className = 'trait-pips';
+    bps.forEach(bp => {
+      const pip = document.createElement('div');
+      pip.className = 'trait-pip' + (count >= bp ? ' active' : '');
+      pips.appendChild(pip);
+    });
+    row.appendChild(name);
+    row.appendChild(cnt);
+    row.appendChild(pips);
+    el.appendChild(row);
+  });
+}
+
+function renderSidebarPlanner() {
+  const el = document.getElementById('sidebar-planner');
+  el.innerHTML = '';
+  if (!session.cfg.plannerIds.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sidebar-empty';
+    empty.textContent = 'No targets set (free roll)';
+    el.appendChild(empty);
+    return;
+  }
+  session.cfg.plannerIds.forEach(id => {
+    const unit = UNITS.find(u => u.id === id);
+    if (!unit) return;
+    const row = document.createElement('div');
+    row.className = 'planner-unit-row';
+    const img = imgEl(unit, 'planner-unit-icon');
+    row.appendChild(img);
+    const nameEl = document.createElement('div');
+    nameEl.className = 'planner-unit-name';
+    nameEl.textContent = unit.displayName;
+    row.appendChild(nameEl);
+    const cost = document.createElement('div');
+    cost.className = `planner-unit-cost c${unit.cost}`;
+    cost.textContent = unit.cost;
+    row.appendChild(cost);
+    el.appendChild(row);
+  });
+}
+
+// ── SUMMARY ───────────────────────────────────────────────────────────────────
+
+function renderSummary() {
+  const s = session;
+  const elapsed = ((Date.now() - s.startTime)/1000);
+  const rolls = s.rollCount;
+  const rps = s.firstRollTime && s.lastRollTime && rolls > 1
+    ? (rolls / ((s.lastRollTime - s.firstRollTime)/1000)).toFixed(2)
+    : '—';
+
+  const statsEl = document.getElementById('summary-stats');
+  statsEl.innerHTML = `
+    <div class="summary-stat"><span class="summary-stat-value">${elapsed.toFixed(0)}s</span><span class="summary-stat-label">Time Elapsed</span></div>
+    <div class="summary-stat"><span class="summary-stat-value">${s.purchased.length}</span><span class="summary-stat-label">Units Purchased</span></div>
+    <div class="summary-stat"><span class="summary-stat-value">${rolls}</span><span class="summary-stat-label">Rerolls Used</span></div>
+    <div class="summary-stat"><span class="summary-stat-value">${rps}</span><span class="summary-stat-label">Rolls / Second</span></div>
+    <div class="summary-stat"><span class="summary-stat-value">${s.missedTargets.length}</span><span class="summary-stat-label">Missed Targets</span></div>
+    <div class="summary-stat"><span class="summary-stat-value">${s.gold}g</span><span class="summary-stat-label">Gold Remaining</span></div>
+  `;
+
+  const missedEl = document.getElementById('summary-missed');
+  if (!s.missedTargets.length) {
+    missedEl.innerHTML = '<div style="font-size:13px;color:var(--success);">✓ Perfect — no target units missed!</div>';
+  } else {
+    // Deduplicate
+    const seen = {};
+    s.missedTargets.forEach(({unit}) => { seen[unit.id] = unit; });
+    missedEl.innerHTML = Object.values(seen).map(unit => `
+      <div class="summary-missed-unit">
+        <img src="${imgUrl(unit)}" alt="${unit.displayName}" onerror="this.style.display='none'">
+        <span>${unit.displayName}</span>
+      </div>
+    `).join('');
+  }
+
+  const purchasedEl = document.getElementById('summary-purchased-list');
+  if (!s.purchased.length) {
+    purchasedEl.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:8px 0;">No units purchased.</div>';
+  } else {
+    purchasedEl.innerHTML = s.purchased.map(({unit, time}) => `
+      <div class="summary-purchased-item">
+        <img src="${imgUrl(unit)}" alt="${unit.displayName}" onerror="this.style.display='none'">
+        <span class="cost-text c${unit.cost}" style="font-weight:600;">${unit.displayName}</span>
+        <span style="color:var(--text-muted);font-size:11px;">${unit.traits.join(', ')}</span>
+        <span class="summary-time-tag">+${time}s</span>
+      </div>
+    `).join('');
+  }
+}
+
+// ── CONFIG SCREEN ─────────────────────────────────────────────────────────────
+
+function initConfigScreen() {
+  // Level chooser
+  const lc = document.getElementById('level-chooser');
+  for (let lvl = 1; lvl <= 10; lvl++) {
+    const btn = document.createElement('button');
+    btn.className = 'config-choice' + (lvl === config.level ? ' selected' : '');
+    btn.textContent = lvl;
+    btn.onclick = () => {
+      config.level = lvl;
+      lc.querySelectorAll('.config-choice').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+    lc.appendChild(btn);
+  }
+
+  // Gold range
+  const gr = document.getElementById('gold-range');
+  const grv = document.getElementById('gold-range-val');
+  gr.addEventListener('input', () => {
+    config.gold = parseInt(gr.value);
+    grv.textContent = gr.value + 'g';
+  });
+
+  // Timer chooser
+  const tc = document.getElementById('timer-chooser');
+  [{label:'30s',val:30},{label:'60s',val:60},{label:'Unlimited',val:'unlimited'}].forEach(({label,val}) => {
+    const btn = document.createElement('button');
+    btn.className = 'config-choice' + (val === config.timerMode ? ' selected' : '');
+    btn.textContent = label;
+    btn.onclick = () => {
+      config.timerMode = val;
+      tc.querySelectorAll('.config-choice').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+    tc.appendChild(btn);
+  });
+
+  // Stats checkbox
+  document.getElementById('show-stats-chk').addEventListener('change', e => {
+    config.showStats = e.target.checked;
+  });
+
+  // Unit picker
+  initUnitPicker();
+}
+
+let costFilter = 0;
+let searchQuery = '';
+
+function initUnitPicker() {
+  const cf = document.getElementById('cost-filters');
+  const allBtn = document.createElement('button');
+  allBtn.className = 'unit-filter-btn active';
+  allBtn.textContent = 'All';
+  allBtn.onclick = () => { costFilter = 0; updateFilterBtns(allBtn); renderUnitPicker(); };
+  cf.appendChild(allBtn);
+  for (let c = 1; c <= 5; c++) {
+    const btn = document.createElement('button');
+    btn.className = `unit-filter-btn fc${c}`;
+    btn.textContent = `${c}g`;
+    const cost = c;
+    btn.onclick = () => { costFilter = cost; updateFilterBtns(btn); renderUnitPicker(); };
+    cf.appendChild(btn);
+  }
+
+  document.getElementById('unit-search').addEventListener('input', e => {
+    searchQuery = e.target.value.toLowerCase();
+    renderUnitPicker();
+  });
+
+  renderUnitPicker();
+}
+
+function updateFilterBtns(active) {
+  document.getElementById('cost-filters').querySelectorAll('.unit-filter-btn').forEach(b => b.classList.remove('active'));
+  active.classList.add('active');
+}
+
+function renderUnitPicker() {
+  const grid = document.getElementById('unit-picker-grid');
+  grid.innerHTML = '';
+  const filtered = UNITS.filter(u =>
+    (!costFilter || u.cost === costFilter) &&
+    (!searchQuery || u.displayName.toLowerCase().includes(searchQuery))
+  );
+  filtered.forEach(unit => {
+    const card = document.createElement('div');
+    const sel = config.plannerIds.includes(unit.id);
+    card.className = 'unit-pick-card' + (sel ? ' selected' : '');
+    const bar = document.createElement('div');
+    bar.className = `unit-pick-cost-bar c${unit.cost}`;
+    card.appendChild(bar);
+    const img = imgEl(unit, 'unit-pick-art');
+    card.appendChild(img);
+    const name = document.createElement('div');
+    name.className = 'unit-pick-name';
+    name.textContent = unit.displayName;
+    card.appendChild(name);
+    card.onclick = () => togglePlannerUnit(unit.id);
+    grid.appendChild(card);
+  });
+}
+
+function togglePlannerUnit(id) {
+  const idx = config.plannerIds.indexOf(id);
+  if (idx !== -1) {
+    config.plannerIds.splice(idx, 1);
+  } else {
+    if (config.plannerIds.length >= 10) return;
+    config.plannerIds.push(id);
+  }
+  renderUnitPicker();
+  renderConfigPlanner();
+}
+
+function renderConfigPlanner() {
+  const el = document.getElementById('config-planner-list');
+  const cnt = document.getElementById('planner-count');
+  cnt.textContent = config.plannerIds.length;
+  el.innerHTML = '';
+  config.plannerIds.forEach(id => {
+    const unit = UNITS.find(u => u.id === id);
+    if (!unit) return;
+    const chip = document.createElement('div');
+    chip.style.cssText = 'display:flex;align-items:center;gap:4px;background:var(--bg-3);border:1px solid var(--border-bright);border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer;';
+    chip.title = 'Click to remove';
+    const img = imgEl(unit, '');
+    img.style.cssText = 'width:18px;height:18px;border-radius:2px;object-fit:cover;object-position:top;';
+    chip.appendChild(img);
+    const name = document.createElement('span');
+    name.style.color = 'var(--text)';
+    name.textContent = unit.displayName.split(' ')[0];
+    chip.appendChild(name);
+    chip.onclick = () => togglePlannerUnit(id);
+    el.appendChild(chip);
+  });
+}
+
+// ── KEYBOARD HANDLER ──────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (!session || session.ended) return;
+  const key = e.key.toLowerCase();
+  if (key === 'd') { e.preventDefault(); doReroll(); }
+  else if (key === 'f') { e.preventDefault(); doBuyXP(); }
+  else if (key === 'w') { e.preventDefault(); doMove(); }
+  else if (key === 'e') { e.preventDefault(); doSell(); }
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+
+initConfigScreen();
+renderConfigPlanner();
+</script>
+</body>
+</html>
