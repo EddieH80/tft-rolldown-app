@@ -250,6 +250,15 @@
     display: flex; align-items: center; gap: 5px;
     background: var(--bg-3); border-radius: 3px; padding: 3px 6px;
   }
+  .planner-trait-row.planner-trait-inactive {
+    opacity: 0.45;
+  }
+  .planner-trait-row.planner-trait-inactive .planner-trait-name {
+    color: var(--text-muted);
+  }
+  .planner-trait-row.planner-trait-inactive .planner-trait-icon {
+    color: var(--text-dim);
+  }
   .planner-trait-icon {
     width: 14px; height: 14px; border-radius: 2px;
     background: var(--bg-4); flex-shrink: 0;
@@ -649,8 +658,18 @@ function rollShop() {
   session.rollCount++;
 }
 
+function getMaxedUnitIds() {
+  // Returns a Set of unit IDs where the player already has a 3★ copy on board or bench
+  const maxed = new Set();
+  [...session.board, ...session.bench].forEach(u => {
+    if (u && u.copies === 3) maxed.add(u.unit.id);
+  });
+  return maxed;
+}
+
 function drawFromTier(cost) {
-  const eligible = UNITS.filter(u => u.cost === cost && session.pool[u.id] > 0);
+  const maxed = getMaxedUnitIds();
+  const eligible = UNITS.filter(u => u.cost === cost && session.pool[u.id] > 0 && !maxed.has(u.id));
   if (!eligible.length) return null;
   const total = eligible.reduce((s,u) => s + session.pool[u.id], 0);
   let r = Math.random() * total, cum = 0;
@@ -1214,33 +1233,37 @@ function renderSidebarPlanner() {
     e.textContent='No targets (free roll)'; el.appendChild(e); return;
   }
 
-  // Compute trait synergies from planner units
+  // Compute trait synergies from planner units — show ALL traits, active and partial
   const traitCounts = {};
   session.cfg.plannerIds.forEach(id => {
     const unit = UNITS.find(u => u.id === id);
     if (!unit) return;
     unit.traits.forEach(t => { traitCounts[t] = (traitCounts[t]||0) + 1; });
   });
-  const activeTraits = Object.entries(traitCounts)
-    .filter(([t, cnt]) => {
-      const bps = TRAIT_BREAKPOINTS[t] || [2];
-      return cnt >= bps[0]; // at least first breakpoint
-    })
-    .sort((a,b) => b[1]-a[1]);
 
-  // Trait synergy rows (above the portrait grid)
-  if (activeTraits.length) {
+  // Sort: active traits (hit first breakpoint) first, then partial by count desc
+  const allTraits = Object.entries(traitCounts).sort((a, b) => {
+    const aActive = a[1] >= (TRAIT_BREAKPOINTS[a[0]] || [2])[0];
+    const bActive = b[1] >= (TRAIT_BREAKPOINTS[b[0]] || [2])[0];
+    if (aActive !== bActive) return bActive - aActive; // active first
+    return b[1] - a[1]; // then by count
+  });
+
+  if (allTraits.length) {
     const traitList = document.createElement('div');
     traitList.className = 'planner-trait-list';
-    activeTraits.forEach(([trait, count]) => {
+    allTraits.forEach(([trait, count]) => {
       const bps = TRAIT_BREAKPOINTS[trait] || [2,4];
+      const isActive = count >= bps[0];
       const nextBp = bps.find(bp => bp > count) || bps[bps.length-1];
-      const row = document.createElement('div'); row.className = 'planner-trait-row';
+      const row = document.createElement('div');
+      row.className = 'planner-trait-row' + (isActive ? '' : ' planner-trait-inactive');
       const icon = document.createElement('div'); icon.className = 'planner-trait-icon';
       icon.textContent = trait.charAt(0);
       const nm = document.createElement('div'); nm.className = 'planner-trait-name'; nm.textContent = trait;
       const frac = document.createElement('div'); frac.className = 'planner-trait-fraction';
       frac.textContent = `${count}/${nextBp}`;
+      if (!isActive) frac.style.color = 'var(--text-dim)';
       const pips = document.createElement('div'); pips.className = 'trait-pips';
       bps.forEach(bp => {
         const pip = document.createElement('div');
