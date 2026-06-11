@@ -84,7 +84,7 @@
   #app-layout { display: grid; grid-template-columns: 1fr 240px; grid-template-rows: 1fr auto; flex: 1; overflow: hidden; }
   #board-area { grid-column:1; grid-row:1; padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
   #sidebar { grid-column:2; grid-row:1/3; background: var(--bg-2); border-left: 1px solid var(--border); overflow-y: auto; padding: 10px; }
-  #shop-area { grid-column:1; grid-row:2; background: var(--bg-2); border-top: 1px solid var(--border); padding: 10px 12px; }
+  #shop-area { grid-column:1; grid-row:2; background: var(--bg-2); border-top: 1px solid var(--border); padding: 10px 12px; flex-shrink: 0; max-height: 210px; overflow: hidden; }
 
   /* ─── BOARD ─── */
   .zone-label { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
@@ -124,7 +124,7 @@
   .btn-buyxp:hover:not(:disabled) { background:rgba(58,123,213,0.18); border-color:#3A7BD5; }
   .shop-action-btn:disabled { opacity:0.3; cursor:not-allowed; }
   .shop-slots { display:grid; grid-template-columns:repeat(5,1fr); gap:7px; }
-  .shop-slot { border-radius:var(--radius); overflow:hidden; cursor:pointer; position:relative; transition:transform 0.1s; border:2px solid transparent; aspect-ratio:0.72; }
+  .shop-slot { border-radius:var(--radius); overflow:hidden; cursor:pointer; position:relative; transition:transform 0.1s; border:2px solid transparent; aspect-ratio:0.72; max-height: 140px; }
   .shop-slot:hover:not(.empty) { transform:translateY(-2px); }
   .shop-slot.empty { background:var(--bg-3); border:1px dashed var(--border); cursor:default; }
   .shop-slot.cost1 { border-color:var(--cost1); background:var(--cost1-bg); }
@@ -644,9 +644,11 @@ function purchaseUnit(slotIdx) {
       ...session.bench.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===2?{u,type:'bench',i}:null).filter(Boolean),
       ...session.board.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===2?{u,type:'board',i}:null).filter(Boolean),
     ];
-    // Need ≥2 existing 1-stars (buying a 3rd triggers 2★ combine, freeing 2 slots → net +1)
-    // OR ≥2 existing 2-stars (buying triggers 1★+2★+2★ → 3★ combine, freeing 2 slots)
-    const willCombine = oneStars.length >= 2 || twoStars.length >= 2;
+    // Case A: ≥2 existing 1★ → buying the 3rd makes 3×1★ → 2★ (frees 2 slots, net +1 free)
+    // Case B: ≥2 existing 1★ AND ≥2 existing 2★ → 3×1★→2★ cascade into 3×2★→3★ (frees 4 slots)
+    // Case B is a superset of A, so just checking oneStars.length >= 2 covers both.
+    // Buying a 1★ when only 2×2★ exist does NOT combine (2★+2★+1★ is not 3 of the same tier).
+    const willCombine = oneStars.length >= 2;
     if (!willCombine) { flashRed(document.getElementById('bench-row')); return; }
 
     // Use a virtual overflow slot: push the new unit onto the bench array temporarily,
