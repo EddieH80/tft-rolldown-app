@@ -348,7 +348,31 @@
   .summary-btn.secondary { border-color:var(--border-bright); color:var(--text-muted); }
   .summary-btn.secondary:hover { border-color:var(--text-muted); color:var(--text); }
 
-  /* ─── DRAG GHOST ─── */
+  /* ─── SHOP SELL ZONE ─── */
+  #shop-sell-zone {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(192,57,43,0.18);
+    border: 2px dashed var(--danger);
+    border-radius: var(--radius);
+    z-index: 10;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  #shop-sell-zone.active { display: flex; }
+  #shop-sell-zone-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--danger);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(11,11,15,0.82);
+    padding: 6px 14px;
+    border-radius: var(--radius);
+  }
+  #shop-area { position: relative; }
   #drag-ghost {
     position: fixed; pointer-events: none; z-index: 9999;
     width: 54px; height: 54px; border-radius: 4px; overflow: hidden;
@@ -390,6 +414,12 @@
         <div class="config-checkbox-row">
           <input type="checkbox" id="show-stats-chk" checked>
           <label for="show-stats-chk" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Show post-session stats</label>
+        </div>
+      </div>
+      <div class="config-field">
+        <div class="config-checkbox-row">
+          <input type="checkbox" id="infinite-gold-chk">
+          <label for="infinite-gold-chk" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Infinite gold <span style="color:var(--text-dim);font-size:10px;">(practice buying patterns)</span></label>
         </div>
       </div>
     </div>
@@ -452,6 +482,7 @@
       <div class="sidebar-section"><div class="sidebar-title">Team Planner</div><div id="sidebar-planner"></div></div>
     </div>
     <div id="shop-area">
+      <div id="shop-sell-zone"><div id="shop-sell-zone-label">🪙 Drop to Sell</div></div>
       <div class="shop-controls">
         <button class="shop-action-btn btn-reroll" id="btn-reroll" onclick="doReroll()"><span class="kbd">D</span> Reroll <span style="color:var(--gold-dim);font-size:10px;">(2g)</span></button>
         <button class="shop-action-btn btn-buyxp" id="btn-buyxp" onclick="doBuyXP()"><span class="kbd">F</span> Buy XP <span style="color:#3A7BD5;font-size:10px;">(4g)</span></button>
@@ -592,12 +623,13 @@ const TRAIT_BREAKPOINTS = {
 };
 
 // ─── CONFIG STATE ─────────────────────────────────────────────────────────────
-let config = { level:8, gold:50, timerMode:30, showStats:true, plannerIds:[] };
+let config = { level:8, gold:50, timerMode:30, showStats:true, infiniteGold:false, plannerIds:[] };
 let session = null;
 
 // ─── DRAG STATE ───────────────────────────────────────────────────────────────
 let drag = null; // {type:'bench'|'board', idx}
 let hoverCell = null; // {type, idx} — for E key sell
+let hoverShop = false; // true when dragging over the shop area
 
 // ─── SESSION ──────────────────────────────────────────────────────────────────
 function newSession(cfg) {
@@ -681,13 +713,17 @@ function elapsed() { return ((Date.now() - session.startTime) / 1000).toFixed(1)
 
 // ─── ECONOMY ──────────────────────────────────────────────────────────────────
 function doReroll() {
-  if (!session || session.gold < 2 || session.ended) return;
-  session.gold -= 2; rollShop(); renderAll();
+  if (!session || session.ended) return;
+  if (!session.cfg.infiniteGold && session.gold < 2) return;
+  if (!session.cfg.infiniteGold) session.gold -= 2;
+  rollShop(); renderAll();
 }
 
 function doBuyXP() {
-  if (!session || session.gold < 4 || session.ended || session.level >= 10) return;
-  session.gold -= 4; session.xp += 4; checkLevelUp(); renderAll();
+  if (!session || session.ended || session.level >= 10) return;
+  if (!session.cfg.infiniteGold && session.gold < 4) return;
+  if (!session.cfg.infiniteGold) session.gold -= 4;
+  session.xp += 4; checkLevelUp(); renderAll();
 }
 
 function checkLevelUp() {
@@ -697,44 +733,31 @@ function checkLevelUp() {
 function purchaseUnit(slotIdx) {
   if (!session || session.ended) return;
   const unit = session.shop[slotIdx];
-  if (!unit || session.gold < unit.cost) return;
+  if (!unit) return;
+  if (!session.cfg.infiniteGold && session.gold < unit.cost) return;
 
   const benchFull = session.bench.indexOf(null) === -1;
 
   if (benchFull) {
-    // Check if buying this unit would trigger a combine (freeing a bench slot)
     const oneStars = [
       ...session.bench.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===1?{u,type:'bench',i}:null).filter(Boolean),
       ...session.board.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===1?{u,type:'board',i}:null).filter(Boolean),
     ];
-    const twoStars = [
-      ...session.bench.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===2?{u,type:'bench',i}:null).filter(Boolean),
-      ...session.board.map((u,i)=>u&&u.unit.id===unit.id&&u.copies===2?{u,type:'board',i}:null).filter(Boolean),
-    ];
-    // Case A: ≥2 existing 1★ → buying the 3rd makes 3×1★ → 2★ (frees 2 slots, net +1 free)
-    // Case B: ≥2 existing 1★ AND ≥2 existing 2★ → 3×1★→2★ cascade into 3×2★→3★ (frees 4 slots)
-    // Case B is a superset of A, so just checking oneStars.length >= 2 covers both.
-    // Buying a 1★ when only 2×2★ exist does NOT combine (2★+2★+1★ is not 3 of the same tier).
     const willCombine = oneStars.length >= 2;
     if (!willCombine) { flashRed(document.getElementById('bench-row')); return; }
 
-    // Use a virtual overflow slot: push the new unit onto the bench array temporarily,
-    // checkCombine will collapse it back down to ≤9 slots via nulling consumed units.
-    session.gold -= unit.cost;
+    if (!session.cfg.infiniteGold) session.gold -= unit.cost;
     session.shop[slotIdx] = null;
     if (session.shopReserved[unit.id]) {
       session.shopReserved[unit.id]--;
       if (!session.shopReserved[unit.id]) delete session.shopReserved[unit.id];
     }
-    // Temporarily extend bench to hold the new unit, then combine collapses it
     session.bench.push({unit, copies:1});
     checkCombine(unit.id);
-    // Trim any null-padded slots beyond 9 that resulted from combine
     session.bench = session.bench.filter((u, i) => i < 9 || u !== null).slice(0, 9);
-    // If bench still has >9 real units something went wrong — shouldn't happen
   } else {
     const benchIdx = session.bench.indexOf(null);
-    session.gold -= unit.cost;
+    if (!session.cfg.infiniteGold) session.gold -= unit.cost;
     session.shop[slotIdx] = null;
     if (session.shopReserved[unit.id]) {
       session.shopReserved[unit.id]--;
@@ -787,13 +810,22 @@ function flashRed(el) {
   setTimeout(() => { el.style.outline=''; }, 500);
 }
 
+function sellValue(placed) {
+  // Sell value = (3 * starLevel * unitCost) - (unitCost > 1 ? 1 : 0)
+  const starLevel = placed.copies; // 1, 2, or 3
+  const cost = placed.unit.cost;
+  return 3 * starLevel * cost - (cost > 1 ? 1 : 0);
+}
+
 function sellUnit(type, idx) {
   if (!session) return;
   const arr = type === 'bench' ? session.bench : session.board;
   const placed = arr[idx];
   if (!placed) return;
-  session.gold += placed.unit.cost * placed.copies;
-  session.pool[placed.unit.id] = (session.pool[placed.unit.id]||0) + placed.copies;
+  session.gold += sellValue(placed);
+  // Return the component 1★ copies back to the pool: 3^(starLevel-1)
+  const poolReturn = Math.pow(3, placed.copies - 1);
+  session.pool[placed.unit.id] = (session.pool[placed.unit.id]||0) + poolReturn;
   arr[idx] = null;
   renderAll();
 }
@@ -865,14 +897,20 @@ document.addEventListener('mouseup', (e) => {
   document.querySelectorAll('.drag-over, .sell-hover').forEach(c => {
     c.classList.remove('drag-over','sell-hover');
   });
+  document.getElementById('shop-sell-zone').classList.remove('active');
 
-  if (hoverCell) {
+  if (hoverShop && session) {
+    // Drop onto shop area = sell the unit
+    sellUnit(drag.type, drag.idx);
+  } else if (hoverCell && (!hoverShop)) {
     const src = drag;
     const dst = hoverCell;
     if (src.type !== dst.type || src.idx !== dst.idx) {
       dropUnit(src, dst);
     }
   }
+
+  hoverShop = false;
   drag = null;
   renderAll();
 });
@@ -971,7 +1009,7 @@ function renderAll() {
 
 function renderHUD() {
   document.getElementById('hud-level').textContent = session.level;
-  document.getElementById('hud-gold').textContent = session.gold;
+  document.getElementById('hud-gold').textContent = session.cfg.infiniteGold ? '∞' : session.gold;
   renderTimer();
   const prevThresh = XP_THRESHOLDS[session.level-1] || 0;
   const nextThresh = session.level >= 10 ? session.xp : XP_THRESHOLDS[session.level];
@@ -983,8 +1021,8 @@ function renderHUD() {
   document.getElementById('board-count').textContent = session.board.filter(Boolean).length;
   document.getElementById('board-cap').textContent = session.level;
   document.getElementById('bench-count').textContent = session.bench.filter(Boolean).length;
-  document.getElementById('btn-reroll').disabled = session.gold < 2;
-  document.getElementById('btn-buyxp').disabled = session.gold < 4 || session.level >= 10;
+  document.getElementById('btn-reroll').disabled = !session.cfg.infiniteGold && session.gold < 2;
+  document.getElementById('btn-buyxp').disabled = (!session.cfg.infiniteGold && session.gold < 4) || session.level >= 10;
 }
 
 function renderBoard() {
@@ -1070,6 +1108,31 @@ setTimeout(() => {
   if (wrap) _resizeObs.observe(wrap);
 }, 0);
 
+// ─── SHOP SELL ZONE (drag-to-sell) ────────────────────────────────────────────
+setTimeout(() => {
+  const shopArea = document.getElementById('shop-area');
+  const sellZone = document.getElementById('shop-sell-zone');
+  const sellLabel = document.getElementById('shop-sell-zone-label');
+
+  shopArea.addEventListener('mouseenter', () => {
+    if (!drag || !session) return;
+    hoverShop = true;
+    hoverCell = null; // clear any cell hover when over shop
+    const src = drag;
+    const placed = src.type === 'bench' ? session.bench[src.idx] : session.board[src.idx];
+    if (placed) {
+      const val = sellValue(placed);
+      sellLabel.textContent = `🪙 Sell for ${val}g`;
+    }
+    sellZone.classList.add('active');
+  });
+
+  shopArea.addEventListener('mouseleave', () => {
+    hoverShop = false;
+    sellZone.classList.remove('active');
+  });
+}, 0);
+
 function renderBench() {
   const el = document.getElementById('bench-row');
   el.innerHTML = '';
@@ -1134,7 +1197,7 @@ function renderShop() {
     if (!unit) { div.className = 'shop-slot empty'; }
     else {
       const isTarget = session.cfg.plannerIds.includes(unit.id);
-      const cantAfford = session.gold < unit.cost;
+      const cantAfford = !session.cfg.infiniteGold && session.gold < unit.cost;
       const upgrade = getUpgradePreview(unit.id); // null | 2 | 3
       div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}${upgrade?' will-upgrade':''}`;
 
@@ -1381,6 +1444,7 @@ function initConfigScreen() {
     tc.appendChild(btn);
   });
   document.getElementById('show-stats-chk').addEventListener('change', e=>{ config.showStats=e.target.checked; });
+  document.getElementById('infinite-gold-chk').addEventListener('change', e=>{ config.infiniteGold=e.target.checked; });
 
   // Unit picker
   const cf = document.getElementById('cost-filters');
