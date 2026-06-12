@@ -84,9 +84,31 @@
   #app-layout { display: grid; grid-template-columns: 1fr 240px; grid-template-rows: 1fr auto; flex: 1; overflow: hidden; }
   #board-area { grid-column:1; grid-row:1; padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
   #sidebar { grid-column:2; grid-row:1/3; background: var(--bg-2); border-left: 1px solid var(--border); overflow-y: auto; padding: 10px; }
-  #shop-area { grid-column:1; grid-row:2; background: var(--bg-2); border-top: 1px solid var(--border); padding: 8px 12px; flex-shrink: 0; max-height: 220px; overflow: hidden; }
+  #shop-area { grid-column:1; grid-row:2; background: var(--bg-2); border-top: 1px solid var(--border); padding: 8px 12px; flex-shrink: 0; max-height: 210px; overflow: hidden; }
 
-  /* ─── BOARD ─── */
+  /* ─── BOARD FRACTION OVERLAY ─── */
+  #board-fraction-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #board-fraction-text {
+    font-size: clamp(28px, 5vw, 52px);
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    color: rgba(126, 200, 227, 0.55);
+    text-shadow:
+      0 0 20px rgba(126, 200, 227, 0.3),
+      0 2px 4px rgba(0,0,0,0.6);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    user-select: none;
+  }
+  #board-fraction-overlay.hidden { display: none; }
   .zone-label { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
 
   /* Hex board: absolute-positioned hexagons in a pointy-top offset grid */
@@ -169,13 +191,12 @@
   .btn-buyxp { background:rgba(58,123,213,0.08); border-color:#1E5FA0; color:#7EC8E3; }
   .btn-buyxp:hover:not(:disabled) { background:rgba(58,123,213,0.18); border-color:#3A7BD5; }
   .shop-action-btn:disabled { opacity:0.3; cursor:not-allowed; }
-  .shop-slots { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; align-items:start; }
+  .shop-slots { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; align-items:start; }
   .shop-slot {
     border-radius:var(--radius); overflow:hidden; cursor:pointer; position:relative;
     transition:transform 0.12s, box-shadow 0.12s;
     border:2px solid transparent;
-    aspect-ratio: 3/4;
-    max-height: 160px;
+    height: 150px;          /* fixed height so all slots are equal */
     background: #0a0a12;
   }
   .shop-slot:hover:not(.empty) { transform:translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.6); }
@@ -200,12 +221,12 @@
   .shop-slot.will-upgrade-3 { animation: upgrade-pulse-gold 1.8s ease-in-out infinite; }
   /* No backdrop pseudo — art fills card cleanly */
   .shop-slot::before { display: none; }
-  /* Art: cover fills the full portrait card */
+  /* Art covers full slot — wider slot crops sides naturally, showing face/upper body */
   .shop-art {
     position: absolute; inset: 0;
     width: 100%; height: 100%;
     object-fit: cover;
-    object-position: center top;
+    object-position: center 15%;
     display: block;
     background: #0a0a12;
     z-index: 1;
@@ -547,6 +568,9 @@
       <div class="zone-label">Board (<span id="board-count">0</span>/<span id="board-cap">8</span>)</div>
       <div id="hex-board-wrap">
         <div id="hex-board"></div>
+        <div id="board-fraction-overlay">
+          <span id="board-fraction-text"></span>
+        </div>
       </div>
       <div class="zone-label" style="margin-top:4px;">Bench (<span id="bench-count">0</span>/9)</div>
       <div class="bench-row" id="bench-row"></div>
@@ -1113,9 +1137,20 @@ function renderHUD() {
   const pct = session.level >= 10 ? 100 : Math.min(100, range > 0 ? (cur/range)*100 : 0);
   document.getElementById('hud-xp-bar').style.width = pct + '%';
   document.getElementById('hud-xp-label').textContent = session.level >= 10 ? 'MAX' : `${session.xp}/${nextThresh}`;
-  document.getElementById('board-count').textContent = session.board.filter(Boolean).length;
+  const boardCount = session.board.filter(Boolean).length;
+  document.getElementById('board-count').textContent = boardCount;
   document.getElementById('board-cap').textContent = session.level;
   document.getElementById('bench-count').textContent = session.bench.filter(Boolean).length;
+
+  // Board fraction overlay
+  const fracOverlay = document.getElementById('board-fraction-overlay');
+  const fracText = document.getElementById('board-fraction-text');
+  if (boardCount < session.level) {
+    fracText.textContent = `${boardCount}/${session.level}`;
+    fracOverlay.classList.remove('hidden');
+  } else {
+    fracOverlay.classList.add('hidden');
+  }
   document.getElementById('btn-reroll').disabled = !session.cfg.infiniteGold && session.gold < 2;
   document.getElementById('btn-buyxp').disabled = (!session.cfg.infiniteGold && session.gold < 4) || session.level >= 10;
   renderOdds();
