@@ -257,7 +257,37 @@
   .cost-gem.c5 { background:var(--cost5); color:#000; }
   .cost-text { font-size:10px; font-weight:700; }
   .cost-text.c1{color:var(--cost1)} .cost-text.c2{color:var(--cost2)} .cost-text.c3{color:var(--cost3)} .cost-text.c4{color:var(--cost4)} .cost-text.c5{color:var(--cost5)}
-  .shop-target-star { position:absolute; top:4px; left:4px; background:var(--gold); border-radius:50%; width:16px; height:16px; display:flex; align-items:center; justify-content:center; font-size:9px; color:#000; font-weight:700; z-index:3; }
+  .shop-slot.is-target {
+    box-shadow: 0 0 0 3px var(--gold), 0 0 20px rgba(200,155,60,0.7);
+    outline: 3px solid var(--gold);
+  }
+  /* Target banner — tall strip spanning full top of card */
+  .shop-target-banner {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: linear-gradient(to bottom, rgba(200,155,60,0.97) 0%, rgba(160,115,20,0.88) 55%, transparent 100%);
+    padding: 6px 6px 18px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .shop-target-banner-star {
+    font-size: 18px;
+    color: #FFD700;
+    text-shadow: 0 0 8px rgba(255,215,0,0.9), 0 1px 2px rgba(0,0,0,0.5);
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .shop-target-banner-label {
+    font-size: 11px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
 
   /* ─── SIDEBAR ─── */
   .sidebar-title { font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:7px; padding-bottom:3px; border-bottom:1px solid var(--border); }
@@ -622,7 +652,7 @@ const UNITS = [
   {id:'gwen',      displayName:"Gwen",            cost:2, traits:["Space Groove","Rogue"],           key:'gwen'},
   {id:'jax',       displayName:"Jax",             cost:2, traits:["Stargazer","Bastion"],            key:'jax'},
   {id:'jinx',      displayName:"Jinx",            cost:2, traits:["Anima","Challenger"],             key:'jinx'},
-  {id:'meepsie',   displayName:"Meepsie",         cost:2, traits:["Meeple","Shepherd","Voyager"],    key:'yuumi', dkey:'Yuumi', tft17key:'shiro'},
+  {id:'meepsie',   displayName:"Meepsie",         cost:2, traits:["Meeple","Shepherd","Voyager"],    key:'yuumi', dkey:'Yuumi', tft17key:'ivernminion'},
   {id:'milio',     displayName:"Milio",           cost:2, traits:["Timebreaker","Fateweaver"],       key:'milio'},
   {id:'mordekaiser',displayName:"Mordekaiser",    cost:2, traits:["Dark Star","Conduit","Vanguard"],  key:'mordekaiser'},
   {id:'pantheon',  displayName:"Pantheon",        cost:2, traits:["Timebreaker","Brawler","Replicator"],key:'pantheon'},
@@ -645,7 +675,7 @@ const UNITS = [
   // 4-cost
   {id:'aurelionsol',displayName:"Aurelion Sol",   cost:4, traits:["Mecha","Conduit"],               key:'aurelionsol', dkey:'AurelionSol'},
   {id:'corki',     displayName:"Corki",           cost:4, traits:["Meeple","Fateweaver"],           key:'corki'},
-  {id:'mightymech',displayName:"The Mighty Mech", cost:4, traits:["Mecha","Voyager"],              key:'rumble', dkey:'Rumble', tft17key:'ivernminion'},
+  {id:'mightymech',displayName:"The Mighty Mech", cost:4, traits:["Mecha","Voyager"],              key:'rumble', dkey:'Rumble', imageUrl:'https://raw.communitydragon.org/latest/game/assets/ux/tft/championsplashes/patching/tft17_galio_teamplanner_splash.tft_set17.png'},
   {id:'karma',     displayName:"Karma",           cost:4, traits:["Dark Star","Voyager"],           key:'karma'},
   {id:'kindred',   displayName:"Kindred",         cost:4, traits:["N.O.V.A.","Challenger"],        key:'kindred'},
   {id:'leblanc',   displayName:"LeBlanc",         cost:4, traits:["Arbiter","Shepherd"],           key:'leblanc', dkey:'Leblanc'},
@@ -674,6 +704,7 @@ const UNITS = [
 const CDRAGON_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/tft/championsplashes/patching';
 
 function tileUrl(unit) {
+  if (unit.imageUrl) return unit.imageUrl;
   const k = unit.tft17key || unit.id;
   return `${CDRAGON_BASE}/tft17_${k}_teamplanner_splash.tft_set17.png`;
 }
@@ -998,18 +1029,35 @@ document.addEventListener('mouseup', (e) => {
   });
   document.getElementById('shop-sell-zone').classList.remove('active');
 
+  // If hoverCell wasn't set via mouseenter (fast mouse or ghost interference),
+  // resolve the drop target directly from the point under the cursor.
+  let resolvedCell = hoverCell;
+  if (!resolvedCell && !hoverShop) {
+    const els = document.elementsFromPoint(e.clientX, e.clientY);
+    for (const el of els) {
+      if (el.classList.contains('hex-cell-wrap') && el.dataset.idx !== undefined) {
+        resolvedCell = {type:'board', idx: parseInt(el.dataset.idx)};
+        break;
+      }
+      if (el.classList.contains('bench-cell') && el.dataset.idx !== undefined) {
+        resolvedCell = {type:'bench', idx: parseInt(el.dataset.idx)};
+        break;
+      }
+    }
+  }
+
   if (hoverShop && session) {
-    // Drop onto shop area = sell the unit
     sellUnit(drag.type, drag.idx);
-  } else if (hoverCell && (!hoverShop)) {
+  } else if (resolvedCell) {
     const src = drag;
-    const dst = hoverCell;
+    const dst = resolvedCell;
     if (src.type !== dst.type || src.idx !== dst.idx) {
       dropUnit(src, dst);
     }
   }
 
   hoverShop = false;
+  hoverCell = null;
   drag = null;
   renderAll();
 });
@@ -1019,12 +1067,13 @@ function dropUnit(src, dst) {
   const dstArr = dst.type === 'bench' ? session.bench : session.board;
   const srcPlaced = srcArr[src.idx];
   if (!srcPlaced) return;
-  // Moving to board — check cap
-  if (dst.type === 'board' && !dstArr[dst.idx]) {
+  // Only enforce cap when adding a new unit FROM bench to an empty board hex.
+  // Moving within the board (board→board) is always allowed — it's just repositioning.
+  if (src.type === 'bench' && dst.type === 'board' && !dstArr[dst.idx]) {
     const boardCount = session.board.filter(Boolean).length;
-    if (boardCount >= session.level) return; // cap reached, can't add
+    if (boardCount >= session.level) return; // bench→board would exceed cap
   }
-  // Swap
+  // Swap src and dst (works for board↔board, bench↔bench, bench↔board, board↔bench)
   const tmp = dstArr[dst.idx];
   dstArr[dst.idx] = srcArr[src.idx];
   srcArr[src.idx] = tmp;
@@ -1270,6 +1319,7 @@ function renderBench() {
   for (let i = 0; i < 9; i++) {
     const div = document.createElement('div');
     div.className = 'bench-cell';
+    div.dataset.idx = i;
     const placed = session.bench[i];
     if (placed) {
       div.classList.add('occupied');
@@ -1351,11 +1401,19 @@ function renderShop() {
     img.onerror = () => { img.src = squareUrl(unit); img.onerror=()=>{ img.style.background='var(--bg-4)'; img.style.display='none'; }; };
     div.appendChild(img);
 
-    // Target-planner star badge (top-left)
+    // Target-planner banner (top of card, full-width)
     if (isTarget) {
-      const star = document.createElement('div');
-      star.className = 'shop-target-star'; star.textContent = '★';
-      div.appendChild(star);
+      const banner = document.createElement('div');
+      banner.className = 'shop-target-banner';
+      const starEl = document.createElement('span');
+      starEl.className = 'shop-target-banner-star';
+      starEl.textContent = '★';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'shop-target-banner-label';
+      labelEl.textContent = 'Target';
+      banner.appendChild(starEl);
+      banner.appendChild(labelEl);
+      div.appendChild(banner);
     }
 
     // Upgrade star badge (top-right)
