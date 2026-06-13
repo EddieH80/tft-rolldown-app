@@ -534,7 +534,10 @@
       </div>
     </div>
     <div class="config-right">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Team Planner <span style="color:var(--text-dim);font-size:10px;">(up to 10 units)</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:12px;color:var(--text-muted);">Team Planner <span style="color:var(--text-dim);font-size:10px;">(up to 10 units)</span></div>
+        <button onclick="clearPlanner()" style="font-size:10px;color:var(--danger);border:1px solid var(--danger);border-radius:4px;padding:2px 8px;background:transparent;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(192,57,43,0.15)'" onmouseout="this.style.background='transparent'">✕ Clear</button>
+      </div>
       <input class="unit-picker-search" id="unit-search" type="text" placeholder="Search units…">
       <div class="unit-picker-filters" id="cost-filters"></div>
       <div class="unit-picker-grid" id="unit-picker-grid"></div>
@@ -592,7 +595,13 @@
     </div>
     <div id="sidebar">
       <div class="sidebar-section"><div class="sidebar-title">Trait Synergies</div><div id="trait-display"></div></div>
-      <div class="sidebar-section"><div class="sidebar-title">Team Planner</div><div id="sidebar-planner"></div></div>
+      <div class="sidebar-section">
+        <div class="sidebar-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Team Planner</span>
+          <button onclick="clearPlannerSession()" style="font-size:9px;color:var(--danger);border:1px solid var(--danger);border-radius:3px;padding:1px 5px;background:transparent;cursor:pointer;" title="Clear team planner">✕</button>
+        </div>
+        <div id="sidebar-planner"></div>
+      </div>
     </div>
     <div id="shop-area">
       <div id="shop-sell-zone"><div id="shop-sell-zone-label">🪙 Drop to Sell</div></div>
@@ -740,11 +749,25 @@ const TRAIT_ICONS = {
   'Galaxy Hunter': `${TRAIT_ICON_BASE}/new17_tft17_zeduniquetrait_3.svg`,
 };
 
-function traitIconEl(trait, size = 14) {
+function traitTier(count, bps) {
+  // Returns 0 (inactive), 1 (first bp = bronze), 2 (second bp = silver), 3+ (third bp = gold)
+  let tier = 0;
+  for (const bp of bps) { if (count >= bp) tier++; else break; }
+  return Math.min(tier, 3);
+}
+
+function traitIconEl(trait, size = 14, tier = 0) {
   const img = document.createElement('img');
   img.src = TRAIT_ICONS[trait] || '';
   img.alt = trait;
-  img.style.cssText = `width:${size}px; height:${size}px; object-fit:contain; flex-shrink:0; filter:brightness(1.1);`;
+  // tier 0 = inactive (dim), 1 = bronze, 2 = silver, 3 = gold
+  const filterMap = {
+    0: 'brightness(0.5) saturate(0.3)',
+    1: 'sepia(1) saturate(2.5) hue-rotate(5deg) brightness(0.9)',   // bronze
+    2: 'brightness(1.3) saturate(0.2) contrast(1.1)',                // silver
+    3: 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.2)',      // gold
+  };
+  img.style.cssText = `width:${size}px; height:${size}px; object-fit:contain; flex-shrink:0; filter:${filterMap[tier] || filterMap[0]};`;
   img.onerror = () => { img.style.display = 'none'; };
   return img;
 }
@@ -1322,7 +1345,32 @@ setTimeout(() => {
   if (wrap) _resizeObs.observe(wrap);
 }, 0);
 
-// ─── SHOP SELL ZONE (drag-to-sell) ────────────────────────────────────────────
+// ─── SHOP DRAG-TO-BUY ────────────────────────────────────────────────────────
+// Tracks which shop slot the user pressed down on (for drag-out-to-buy)
+let shopMouseDownSlot = -1;
+
+// Wire up after DOM is ready
+setTimeout(() => {
+  const shopArea = document.getElementById('shop-area');
+
+  // When mouse leaves the shop while a slot is held, mark it as pending drag-buy
+  shopArea.addEventListener('mouseleave', (e) => {
+    // shopMouseDownSlot stays set — global mouseup will fire the purchase
+  });
+
+  // On global mouseup outside the shop, complete the purchase
+  document.addEventListener('mouseup', (e) => {
+    if (shopMouseDownSlot === -1) return;
+    const slot = shopMouseDownSlot;
+    shopMouseDownSlot = -1;
+    // Check if the release is outside the shop area
+    if (!shopArea.contains(e.target)) {
+      purchaseUnit(slot);
+      if (session) renderAll();
+    }
+    // If inside shop, the slot's own mouseup already handled it (or will)
+  }, true); // capture phase so it fires before renderAll clears state
+}, 0);
 setTimeout(() => {
   const shopArea = document.getElementById('shop-area');
   const sellZone = document.getElementById('shop-sell-zone');
@@ -1494,7 +1542,21 @@ function renderShop() {
 
     div.appendChild(info);
     const si = i;
-    div.onclick = () => purchaseUnit(si);
+
+    // Buy on mousedown+drag-release OUTSIDE shop, or simple click (mousedown+mouseup in same slot)
+    let shopDragBuySlot = -1;
+    div.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      shopDragBuySlot = si;
+      shopMouseDownSlot = si;
+      e.stopPropagation(); // don't trigger board drag
+    });
+    div.addEventListener('mouseup', (e) => {
+      if (e.button !== 0 || shopDragBuySlot !== si) return;
+      shopDragBuySlot = -1;
+      shopMouseDownSlot = -1; // consumed here, global handler should skip
+      purchaseUnit(si);
+    });
     el.appendChild(div);
   }
 }
@@ -1533,9 +1595,10 @@ function renderTraits() {
   sorted.forEach(([trait, count]) => {
     const bps = TRAIT_BREAKPOINTS[trait] || [2,4];
     const isActive = count >= bps[0];
+    const tier = traitTier(count, bps);
     const row = document.createElement('div');
     row.className = 'trait-row' + (isActive ? '' : ' trait-row-inactive');
-    row.appendChild(traitIconEl(trait, 14));
+    row.appendChild(traitIconEl(trait, 14, tier));
     const nm = document.createElement('div'); nm.className='trait-name'; nm.textContent=trait;
     const cnt = document.createElement('div'); cnt.className='trait-count'; cnt.textContent=count;
     const pips = document.createElement('div'); pips.className='trait-pips';
@@ -1580,11 +1643,12 @@ function renderSidebarPlanner() {
     allTraits.forEach(([trait, count]) => {
       const bps = TRAIT_BREAKPOINTS[trait] || [2,4];
       const isActive = count >= bps[0];
+      const tier = traitTier(count, bps);
       const nextBp = bps.find(bp => bp > count) || bps[bps.length-1];
       const row = document.createElement('div');
       row.className = 'planner-trait-row' + (isActive ? '' : ' planner-trait-inactive');
       const iconWrap = document.createElement('div'); iconWrap.className = 'planner-trait-icon';
-      iconWrap.appendChild(traitIconEl(trait, 13));
+      iconWrap.appendChild(traitIconEl(trait, 13, tier));
       const nm = document.createElement('div'); nm.className = 'planner-trait-name'; nm.textContent = trait;
       const frac = document.createElement('div'); frac.className = 'planner-trait-fraction';
       frac.textContent = `${count}/${nextBp}`;
@@ -1677,6 +1741,19 @@ function showSummary() {
 }
 
 // ─── CONFIG SCREEN INIT ───────────────────────────────────────────────────────
+function clearPlanner() {
+  config.plannerIds = [];
+  renderUnitPicker();
+  renderConfigPlanner();
+}
+
+function clearPlannerSession() {
+  if (!session) return;
+  session.cfg.plannerIds = [];
+  config.plannerIds = []; // keep in sync
+  renderAll();
+}
+
 function initConfigScreen() {
   const lc = document.getElementById('level-chooser');
   for (let l = 1; l <= 10; l++) {
