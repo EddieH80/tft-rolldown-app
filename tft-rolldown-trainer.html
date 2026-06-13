@@ -258,35 +258,20 @@
   .cost-text { font-size:10px; font-weight:700; }
   .cost-text.c1{color:var(--cost1)} .cost-text.c2{color:var(--cost2)} .cost-text.c3{color:var(--cost3)} .cost-text.c4{color:var(--cost4)} .cost-text.c5{color:var(--cost5)}
   .shop-slot.is-target {
-    box-shadow: 0 0 0 3px var(--gold), 0 0 20px rgba(200,155,60,0.7);
-    outline: 3px solid var(--gold);
+    box-shadow: 0 0 0 2px var(--success), 0 0 10px rgba(39,174,96,0.4);
   }
-  /* Target banner — tall strip spanning full top of card */
-  .shop-target-banner {
+  /* Small target icon badge — top-left corner, like in-game */
+  .shop-target-badge {
     position: absolute;
-    top: 0; left: 0; right: 0;
-    background: linear-gradient(to bottom, rgba(200,155,60,0.97) 0%, rgba(160,115,20,0.88) 55%, transparent 100%);
-    padding: 6px 6px 18px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    top: 4px; left: 4px;
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    background: var(--success);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
     z-index: 4;
     pointer-events: none;
-  }
-  .shop-target-banner-star {
-    font-size: 18px;
-    color: #FFD700;
-    text-shadow: 0 0 8px rgba(255,215,0,0.9), 0 1px 2px rgba(0,0,0,0.5);
-    flex-shrink: 0;
-    line-height: 1;
-  }
-  .shop-target-banner-label {
-    font-size: 11px;
-    font-weight: 900;
-    color: #fff;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.6);
   }
 
   /* ─── SIDEBAR ─── */
@@ -713,6 +698,55 @@ function squareUrl(unit) {
   // Fallback: ddragon square icon
   const k = unit.dkey || unit.key.charAt(0).toUpperCase() + unit.key.slice(1);
   return `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VER}/img/champion/${k}.png`;
+}
+
+// ─── TRAIT ICONS (from ap.tft.tools/static/trait-icons/) ─────────────────────
+const TRAIT_ICON_BASE = 'https://ap.tft.tools/static/trait-icons';
+const TRAIT_ICONS = {
+  'N.O.V.A.':      `${TRAIT_ICON_BASE}/new17_tft17_drx_1.svg`,
+  'Anima':         `${TRAIT_ICON_BASE}/new17_tft17_animasquad_1.svg`,
+  'Arbiter':       `${TRAIT_ICON_BASE}/new17_tft17_admin_1.svg`,
+  'Dark Star':     `${TRAIT_ICON_BASE}/new17_tft17_darkstar_1.svg`,
+  'Space Groove':  `${TRAIT_ICON_BASE}/new17_tft17_spacegroove_1.svg`,
+  'Meeple':        `${TRAIT_ICON_BASE}/new17_tft17_astronaut_1.svg`,
+  'Primordian':    `${TRAIT_ICON_BASE}/new17_tft17_primordian_3.svg`,
+  'Stargazer':     `${TRAIT_ICON_BASE}/new17_tft17_stargazer_serpent_1.svg`,
+  'Timebreaker':   `${TRAIT_ICON_BASE}/new17_tft17_timebreaker_1.svg`,
+  'Bastion':       `${TRAIT_ICON_BASE}/new17_tft17_resisttank_1.svg`,
+  'Brawler':       `${TRAIT_ICON_BASE}/new17_tft17_hptank_1.svg`,
+  'Challenger':    `${TRAIT_ICON_BASE}/new17_tft17_astrait_1.svg`,
+  'Conduit':       `${TRAIT_ICON_BASE}/new17_tft17_manatrait_1.svg`,
+  'Fateweaver':    `${TRAIT_ICON_BASE}/new17_tft17_fateweaver_1.svg`,
+  'Marauder':      `${TRAIT_ICON_BASE}/new17_tft17_meleetrait_1.svg`,
+  'Psionic':       `${TRAIT_ICON_BASE}/new17_tft17_psyops_1.svg`,
+  'Replicator':    `${TRAIT_ICON_BASE}/new17_tft17_aptrait_1.svg`,
+  'Rogue':         `${TRAIT_ICON_BASE}/new17_tft17_assassintrait_1.svg`,
+  'Shepherd':      `${TRAIT_ICON_BASE}/new17_tft17_summontrait_1.svg`,
+  'Sniper':        `${TRAIT_ICON_BASE}/new17_tft17_rangedtrait_1.svg`,
+  'Vanguard':      `${TRAIT_ICON_BASE}/new17_tft17_shieldtank_1.svg`,
+  'Voyager':       `${TRAIT_ICON_BASE}/new17_tft17_flextrait_1.svg`,
+  'Mecha':         `${TRAIT_ICON_BASE}/new17_tft17_mecha_3.svg`,
+  'Redeemer':      `${TRAIT_ICON_BASE}/new17_tft17_rhaastuniquetrait_3.svg`,
+  'Gun Goddess':   `${TRAIT_ICON_BASE}/new17_tft17_rangedtrait_1.svg`,
+  'Dark Lady':     `${TRAIT_ICON_BASE}/new17_tft17_morganauniquetrait_3.svg`,
+  'Oracle':        `${TRAIT_ICON_BASE}/new17_tft17_tahmkenchuniquetrait_3.svg`,
+  'Party Animal':  `${TRAIT_ICON_BASE}/new17_tft17_blitzcrankuniquetrait_3.svg`,
+  'Divine Duelist':`${TRAIT_ICON_BASE}/new17_tft17_fiorauniquetrait_3.svg`,
+  'Factory New':   `${TRAIT_ICON_BASE}/new17_tft17_gravestrait_3.svg`,
+  'Eradicator':    `${TRAIT_ICON_BASE}/new17_tft17_jhinuniquetrait_3.svg`,
+  'Bulwark':       `${TRAIT_ICON_BASE}/new17_tft17_shenuniquetrait_3.svg`,
+  'Commander':     `${TRAIT_ICON_BASE}/new17_tft17_sonauniquetrait_3.svg`,
+  'Doomer':        `${TRAIT_ICON_BASE}/new17_tft17_vexuniquetrait_3.svg`,
+  'Galaxy Hunter': `${TRAIT_ICON_BASE}/new17_tft17_zeduniquetrait_3.svg`,
+};
+
+function traitIconEl(trait, size = 14) {
+  const img = document.createElement('img');
+  img.src = TRAIT_ICONS[trait] || '';
+  img.alt = trait;
+  img.style.cssText = `width:${size}px; height:${size}px; object-fit:contain; flex-shrink:0; filter:brightness(1.1);`;
+  img.onerror = () => { img.style.display = 'none'; };
+  return img;
 }
 
 const POOL_SIZES = {1:30, 2:25, 3:18, 4:10, 5:9};
@@ -1401,19 +1435,13 @@ function renderShop() {
     img.onerror = () => { img.src = squareUrl(unit); img.onerror=()=>{ img.style.background='var(--bg-4)'; img.style.display='none'; }; };
     div.appendChild(img);
 
-    // Target-planner banner (top of card, full-width)
+    // Small target badge — top-left green icon (like in-game)
     if (isTarget) {
-      const banner = document.createElement('div');
-      banner.className = 'shop-target-banner';
-      const starEl = document.createElement('span');
-      starEl.className = 'shop-target-banner-star';
-      starEl.textContent = '★';
-      const labelEl = document.createElement('span');
-      labelEl.className = 'shop-target-banner-label';
-      labelEl.textContent = 'Target';
-      banner.appendChild(starEl);
-      banner.appendChild(labelEl);
-      div.appendChild(banner);
+      const badge = document.createElement('div');
+      badge.className = 'shop-target-badge';
+      badge.title = 'Team Planner Target';
+      badge.textContent = '✓';
+      div.appendChild(badge);
     }
 
     // Upgrade star badge (top-right)
@@ -1439,12 +1467,10 @@ function renderShop() {
       unit.traits.forEach(trait => {
         const line = document.createElement('div');
         line.className = 'shop-trait-line';
-        const dot = document.createElement('div');
-        dot.className = 'shop-trait-dot';
-        dot.style.background = traitDotColors[trait] || '#888';
+        line.appendChild(traitIconEl(trait, 11));
         const txt = document.createElement('span');
         txt.textContent = trait;
-        line.appendChild(dot); line.appendChild(txt);
+        line.appendChild(txt);
         traitsDiv.appendChild(line);
       });
       info.appendChild(traitsDiv);
@@ -1481,10 +1507,13 @@ function renderSidebar() {
 function renderTraits() {
   const el = document.getElementById('trait-display');
   el.innerHTML = '';
-  // ONLY board units count for trait synergies
+  // ONLY board units count for trait synergies, and only UNIQUE unit IDs
   const boardUnits = session.board.filter(Boolean);
+  const seenIds = new Set();
   const counts = {};
   boardUnits.forEach(u => {
+    if (seenIds.has(u.unit.id)) return; // skip duplicate unit types
+    seenIds.add(u.unit.id);
     u.unit.traits.forEach(t => { counts[t] = (counts[t]||0) + 1; });
   });
   // Sort: active traits first (by count desc), then inactive by name — stable ordering
@@ -1506,6 +1535,7 @@ function renderTraits() {
     const isActive = count >= bps[0];
     const row = document.createElement('div');
     row.className = 'trait-row' + (isActive ? '' : ' trait-row-inactive');
+    row.appendChild(traitIconEl(trait, 14));
     const nm = document.createElement('div'); nm.className='trait-name'; nm.textContent=trait;
     const cnt = document.createElement('div'); cnt.className='trait-count'; cnt.textContent=count;
     const pips = document.createElement('div'); pips.className='trait-pips';
@@ -1553,8 +1583,8 @@ function renderSidebarPlanner() {
       const nextBp = bps.find(bp => bp > count) || bps[bps.length-1];
       const row = document.createElement('div');
       row.className = 'planner-trait-row' + (isActive ? '' : ' planner-trait-inactive');
-      const icon = document.createElement('div'); icon.className = 'planner-trait-icon';
-      icon.textContent = trait.charAt(0);
+      const iconWrap = document.createElement('div'); iconWrap.className = 'planner-trait-icon';
+      iconWrap.appendChild(traitIconEl(trait, 13));
       const nm = document.createElement('div'); nm.className = 'planner-trait-name'; nm.textContent = trait;
       const frac = document.createElement('div'); frac.className = 'planner-trait-fraction';
       frac.textContent = `${count}/${nextBp}`;
@@ -1565,7 +1595,7 @@ function renderSidebarPlanner() {
         pip.className = 'trait-pip'+(count>=bp?' active':'');
         pips.appendChild(pip);
       });
-      row.appendChild(icon); row.appendChild(nm); row.appendChild(frac); row.appendChild(pips);
+      row.appendChild(iconWrap); row.appendChild(nm); row.appendChild(frac); row.appendChild(pips);
       traitList.appendChild(row);
     });
     el.appendChild(traitList);
