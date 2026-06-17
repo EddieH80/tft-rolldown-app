@@ -80,3 +80,13 @@ V17
 - I'm getting bug scenarios where clicking and dragging the unit in the shop to buy it doesn't always work
 - The team planner should be able to add/remove units while in the rolldown screen
 - Use the official SVG icons you were using before for the different trait levels (bronze, silver, gold) instead of a CSS filter
+
+V18
+- I updated the shop odds and pool sizes to match what was listed at https://www.metatft.com/tables/shop-odds
+- Updated XP thresholds to match https://wiki.leagueoflegends.com/en-us/TFT:Experience
+- I also updated the trait breakpoints to match https://tactics.tools/info/traits
+- Please make sure that the current version of the file is updated with the changes in the uploaded file, and also make sure the bronze/silver/gold trait break points are accurate with the updated breakpoints
+
+V19
+- Add filters for the team planner to let the user organize by units that are in a specific trait to add them to their planner. Traits that are unique (only 1 unit has that trait) should not be a filter
+- Add a checkbox in the configuration screen for including Zed in the unit pool or not for 5 costs. Zed is a special unit that can only be unlocked through an augment, so without the augment the player should not see him while rolling in the game
