@@ -78,7 +78,6 @@
   .topbar-btn:hover { border-color: var(--gold); color: var(--gold); }
   .topbar-btn.end-session { border-color: var(--danger); color: var(--danger); }
   .topbar-btn.end-session:hover { background: rgba(192,57,43,0.15); }
-  .topbar-btn.muted { opacity: 0.4; }
 
   /* ─── LAYOUT ─── */
   #app-wrap { display: flex; flex-direction: column; height: 100vh; }
@@ -220,6 +219,13 @@
   }
   .shop-slot.will-upgrade-2 { animation: upgrade-pulse 1.8s ease-in-out infinite; }
   .shop-slot.will-upgrade-3 { animation: upgrade-pulse-gold 1.8s ease-in-out infinite; }
+  /* One-shot glow flash when an owned unit appears in the shop */
+  @keyframes owned-flash {
+    0%   { box-shadow: none; }
+    30%  { box-shadow: 0 0 0 2px rgba(126,200,227,0.9), 0 0 18px rgba(126,200,227,0.55); }
+    100% { box-shadow: none; }
+  }
+  .shop-slot.owned-flash { animation: owned-flash 1.1s cubic-bezier(0.4,0,0.6,1) 1 forwards; }
   /* No backdrop pseudo — art fills card cleanly */
   .shop-slot::before { display: none; }
   /* Art covers full slot — wider slot crops sides naturally, showing face/upper body */
@@ -637,7 +643,6 @@
       <div class="keybind-hint"><span class="kbd-key">E</span> Sell (hover)</div>
       <div class="keybind-hint"><span class="kbd-key">drag</span> Move</div>
     </div>
-    <button class="topbar-btn" id="mute-btn" onclick="toggleMute()" title="Toggle sound (M)">🔊</button>
     <button class="topbar-btn end-session" onclick="endSession()">End Session</button>
   </div>
   <div id="app-layout">
@@ -972,7 +977,6 @@ function doReroll() {
   if (!session || session.ended) return;
   if (!session.cfg.infiniteGold && session.gold < 2) return;
   if (!session.cfg.infiniteGold) session.gold -= 2;
-  sfx.reroll();
   rollShop(); renderAll();
 }
 
@@ -980,7 +984,6 @@ function doBuyXP() {
   if (!session || session.ended || session.level >= 10) return;
   if (!session.cfg.infiniteGold && session.gold < 4) return;
   if (!session.cfg.infiniteGold) session.gold -= 4;
-  sfx.buyXP();
   session.xp += 4; checkLevelUp(); renderAll();
 }
 
@@ -995,11 +998,6 @@ function purchaseUnit(slotIdx) {
   if (!session.cfg.infiniteGold && session.gold < unit.cost) return;
 
   const benchFull = session.bench.indexOf(null) === -1;
-
-  // Snapshot max star level for this unit before purchase (to detect upgrades)
-  const preStarMax = [...session.bench, ...session.board]
-    .filter(p => p && p.unit.id === unit.id)
-    .reduce((m, p) => Math.max(m, p.copies), 0);
 
   if (benchFull) {
     const oneStars = [
@@ -1029,18 +1027,6 @@ function purchaseUnit(slotIdx) {
     session.bench[benchIdx] = {unit, copies:1};
     checkCombine(unit.id);
   }
-
-  // Detect star-up by comparing post-combine max star level
-  const postStarMax = [...session.bench, ...session.board]
-    .filter(p => p && p.unit.id === unit.id)
-    .reduce((m, p) => Math.max(m, p.copies), 0);
-
-  if (postStarMax > preStarMax && postStarMax >= 2) {
-    sfx.starUp(postStarMax);
-  } else {
-    sfx.buy();
-  }
-
   session.purchased.push({unit, time: elapsed()});
   renderAll();
 }
@@ -1114,7 +1100,6 @@ function sellUnit(type, idx) {
   const poolReturn = Math.pow(3, placed.copies - 1);
   session.pool[placed.unit.id] = (session.pool[placed.unit.id]||0) + poolReturn;
   arr[idx] = null;
-  sfx.sell();
   renderAll();
 }
 
@@ -1235,15 +1220,13 @@ function dropUnit(src, dst) {
   const tmp = dstArr[dst.idx];
   dstArr[dst.idx] = srcArr[src.idx];
   srcArr[src.idx] = tmp;
-  if (src.type === 'bench' && dst.type === 'board') sfx.place();
 }
 
 // ─── KEYBOARD ─────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  const key = e.key.toLowerCase();
-  if (key === 'm') { e.preventDefault(); toggleMute(); return; }
   if (!session || session.ended) return;
+  const key = e.key.toLowerCase();
   if (key === 'd') { e.preventDefault(); doReroll(); }
   else if (key === 'f') { e.preventDefault(); doBuyXP(); }
   else if (key === 'e') {
@@ -1345,7 +1328,7 @@ function renderHUD() {
   const cur = session.xp - prevThresh;
   const pct = session.level >= 10 ? 100 : Math.min(100, range > 0 ? (cur/range)*100 : 0);
   document.getElementById('hud-xp-bar').style.width = pct + '%';
-  document.getElementById('hud-xp-label').textContent = session.level >= 10 ? 'MAX' : `${session.xp}/${nextThresh}`;
+  document.getElementById('hud-xp-label').textContent = session.level >= 10 ? 'MAX' : `${cur}/${range}`;
   const boardCount = session.board.filter(Boolean).length;
   document.getElementById('board-count').textContent = boardCount;
   document.getElementById('board-cap').textContent = session.level;
@@ -1595,6 +1578,10 @@ function renderShop() {
   const el = document.getElementById('shop-slots');
   el.innerHTML = '';
 
+  // Build set of unit IDs currently owned (on bench or board)
+  const ownedIds = new Set();
+  [...session.bench, ...session.board].forEach(p => { if (p) ownedIds.add(p.unit.id); });
+
   // Trait dot color by trait type (simplified — use cost-tier colors as accent)
   const traitDotColors = {
     'N.O.V.A.':'#7EC8E3','Anima':'#A060C0','Arbiter':'#C89B3C','Dark Star':'#503080',
@@ -1605,6 +1592,9 @@ function renderShop() {
     'Vanguard':'#4060A0','Voyager':'#4090C0','Mecha':'#708070',
   };
 
+  // Collect slots that need the flash so we can trigger them after DOM insertion
+  const flashSlots = [];
+
   for (let i = 0; i < 5; i++) {
     const unit = session.shop[i];
     const div = document.createElement('div');
@@ -1613,8 +1603,11 @@ function renderShop() {
     const isTarget = session.cfg.plannerIds.includes(unit.id);
     const cantAfford = !session.cfg.infiniteGold && session.gold < unit.cost;
     const upgrade = getUpgradePreview(unit.id); // null | 2 | 3
+    const isOwned = ownedIds.has(unit.id);
 
     div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}${upgrade===2?' will-upgrade-2':upgrade===3?' will-upgrade-3':''}`;
+
+    if (isOwned) flashSlots.push(div);
 
     // Art: cover fills portrait card
     const img = document.createElement('img');
@@ -1695,6 +1688,14 @@ function renderShop() {
     });
 
     el.appendChild(div);
+  }
+
+  // Trigger owned-flash: add class in the next animation frame so the CSS
+  // animation fires fresh on every reroll, even for the same unit ID.
+  if (flashSlots.length) {
+    requestAnimationFrame(() => {
+      flashSlots.forEach(slot => slot.classList.add('owned-flash'));
+    });
   }
 }
 
@@ -2226,287 +2227,6 @@ function renderConfigPlanner() {
     el.appendChild(chip);
   });
 }
-
-// ─── SOUND ENGINE ─────────────────────────────────────────────────────────────
-// All sounds are synthesized via Web Audio API to closely match TFT's in-game
-// UI sounds: reroll whoosh+flutter, buy thunk+shimmer, XP blip+chime,
-// hex placement thud, sell coin tinks, and 2★/3★ upgrade fanfares.
-
-const sfx = (() => {
-  let ctx = null;
-  let muted = false;
-
-  function ac() {
-    if (!ctx) {
-      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return null; }
-    }
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
-  }
-
-  // Master gain so everything can be scaled together
-  function out(c) {
-    const g = c.createGain();
-    g.gain.value = 0.55;
-    g.connect(c.destination);
-    return g;
-  }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────────
-
-  function sine(c, freq, startT, dur, peakGain, dst) {
-    const o = c.createOscillator(); const g = c.createGain();
-    o.type = 'sine'; o.frequency.value = freq;
-    g.gain.setValueAtTime(0, startT);
-    g.gain.linearRampToValueAtTime(peakGain, startT + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
-    o.connect(g); g.connect(dst);
-    o.start(startT); o.stop(startT + dur + 0.01);
-  }
-
-  function triangle(c, freq, startT, dur, peakGain, dst) {
-    const o = c.createOscillator(); const g = c.createGain();
-    o.type = 'triangle'; o.frequency.value = freq;
-    g.gain.setValueAtTime(0, startT);
-    g.gain.linearRampToValueAtTime(peakGain, startT + 0.005);
-    g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
-    o.connect(g); g.connect(dst);
-    o.start(startT); o.stop(startT + dur + 0.01);
-  }
-
-  function noise(c, startT, dur, gainVal, lpFreq, dst) {
-    const len = Math.ceil(c.sampleRate * dur);
-    const buf = c.createBuffer(1, len, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    const src = c.createBufferSource(); src.buffer = buf;
-    const filt = c.createBiquadFilter();
-    filt.type = 'lowpass'; filt.frequency.value = lpFreq; filt.Q.value = 0.5;
-    const g = c.createGain();
-    g.gain.setValueAtTime(gainVal, startT);
-    g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
-    src.connect(filt); filt.connect(g); g.connect(dst);
-    src.start(startT); src.stop(startT + dur);
-  }
-
-  function click(c, startT, gainVal, dst) {
-    // Very short broadband transient — the "attack" of physical sounds
-    const len = Math.ceil(c.sampleRate * 0.006);
-    const buf = c.createBuffer(1, len, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.15));
-    const src = c.createBufferSource(); src.buffer = buf;
-    const g = c.createGain(); g.gain.value = gainVal;
-    src.connect(g); g.connect(dst);
-    src.start(startT);
-  }
-
-  // ── reroll ────────────────────────────────────────────────────────────────────
-  // TFT reroll: fast card-flutter (3–4 rapid clicks with pitch drop) + airy
-  // mid-freq whoosh that cuts off cleanly. Very snappy, no long tail.
-  function reroll() {
-    const c = ac(); if (!c || muted) return;
-    const t = c.currentTime;
-    const master = out(c);
-
-    // Card flutter: 4 rapid attack transients, each slightly lower pitched
-    const flutterFreqs = [420, 370, 320, 280];
-    flutterFreqs.forEach((freq, i) => {
-      const delay = i * 0.028;
-      // Pitched body
-      const o = c.createOscillator(); const g = c.createGain();
-      o.type = 'square';
-      o.frequency.setValueAtTime(freq, t + delay);
-      o.frequency.exponentialRampToValueAtTime(freq * 0.55, t + delay + 0.045);
-      g.gain.setValueAtTime(0.22 - i * 0.03, t + delay);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.055);
-      // Bandpass to thin it out like a card snap
-      const bp = c.createBiquadFilter(); bp.type = 'bandpass';
-      bp.frequency.value = 1800; bp.Q.value = 2.5;
-      o.connect(bp); bp.connect(g); g.connect(master);
-      o.start(t + delay); o.stop(t + delay + 0.065);
-      // Transient click on each flutter
-      click(c, t + delay, 0.28 - i * 0.04, master);
-    });
-
-    // Whoosh: broadband noise sweep, peaks around 40ms then fades
-    const whooshLen = Math.ceil(c.sampleRate * 0.18);
-    const wbuf = c.createBuffer(1, whooshLen, c.sampleRate);
-    const wd = wbuf.getChannelData(0);
-    for (let i = 0; i < whooshLen; i++) wd[i] = Math.random() * 2 - 1;
-    const wsrc = c.createBufferSource(); wsrc.buffer = wbuf;
-    const wfilt = c.createBiquadFilter(); wfilt.type = 'bandpass';
-    wfilt.frequency.setValueAtTime(3200, t); // start bright
-    wfilt.frequency.exponentialRampToValueAtTime(800, t + 0.18);
-    wfilt.Q.value = 1.2;
-    const wg = c.createGain();
-    wg.gain.setValueAtTime(0, t);
-    wg.gain.linearRampToValueAtTime(0.18, t + 0.035);
-    wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-    wsrc.connect(wfilt); wfilt.connect(wg); wg.connect(master);
-    wsrc.start(t); wsrc.stop(t + 0.19);
-  }
-
-  // ── buy (unit purchase) ───────────────────────────────────────────────────────
-  // TFT buy: a short "thunk" — weighted impact + brief metallic shimmer ring.
-  // Heavier than a click, lighter than a place. Instant attack, fast decay.
-  function buy() {
-    const c = ac(); if (!c || muted) return;
-    const t = c.currentTime;
-    const master = out(c);
-
-    // Impact body: mid-low pitched thump
-    const o = c.createOscillator(); const og = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(220, t);
-    o.frequency.exponentialRampToValueAtTime(85, t + 0.07);
-    og.gain.setValueAtTime(0.55, t);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
-    o.connect(og); og.connect(master);
-    o.start(t); o.stop(t + 0.12);
-
-    // Transient click
-    click(c, t, 0.45, master);
-
-    // Metallic shimmer ring — the TFT "coin" overtone
-    [1480, 2200, 3100].forEach((freq, i) => {
-      triangle(c, freq, t, 0.12 - i * 0.02, 0.06 - i * 0.015, master);
-    });
-  }
-
-  // ── buyXP ─────────────────────────────────────────────────────────────────────
-  // TFT XP buy: a soft upward "blip" — two-tone, warm, subtle. Not dramatic.
-  // Think a gentle electronic chime that rises in pitch.
-  function buyXP() {
-    const c = ac(); if (!c || muted) return;
-    const t = c.currentTime;
-    const master = out(c);
-
-    // Warm low blip
-    sine(c, 440, t, 0.13, 0.3, master);
-    // Rising note — arrives slightly after
-    sine(c, 660, t + 0.055, 0.16, 0.22, master);
-    // Soft high shimmer
-    sine(c, 1320, t + 0.07, 0.10, 0.07, master);
-
-    // Very subtle noise breath
-    noise(c, t, 0.09, 0.04, 2000, master);
-  }
-
-  // ── place (bench → board hex drop) ───────────────────────────────────────────
-  // TFT hex placement: a heavier, more resonant version of buy — a definite
-  // "clunk" with some low-end weight, like setting something down on wood.
-  function place() {
-    const c = ac(); if (!c || muted) return;
-    const t = c.currentTime;
-    const master = out(c);
-
-    // Deep thud — lower and longer than buy
-    const o = c.createOscillator(); const og = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(140, t);
-    o.frequency.exponentialRampToValueAtTime(52, t + 0.09);
-    og.gain.setValueAtTime(0.7, t);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-    o.connect(og); og.connect(master);
-    o.start(t); o.stop(t + 0.16);
-
-    // Hard click transient
-    click(c, t, 0.6, master);
-
-    // Short woody resonance
-    triangle(c, 380, t, 0.06, 0.12, master);
-    triangle(c, 760, t, 0.04, 0.06, master);
-  }
-
-  // ── sell ──────────────────────────────────────────────────────────────────────
-  // TFT sell: 3 quick descending metallic coin tinks — light, bright, slightly
-  // reverberant. Each tink is a short triangle wave with a fast exponential decay.
-  function sell() {
-    const c = ac(); if (!c || muted) return;
-    const t = c.currentTime;
-    const master = out(c);
-
-    const tinks = [
-      { freq: 2100, delay: 0,     gain: 0.28 },
-      { freq: 1750, delay: 0.055, gain: 0.22 },
-      { freq: 1450, delay: 0.105, gain: 0.17 },
-    ];
-    tinks.forEach(({ freq, delay, gain }) => {
-      triangle(c, freq, t + delay, 0.18, gain, master);
-      // Subtle second harmonic for metallic quality
-      triangle(c, freq * 2.76, t + delay, 0.07, gain * 0.25, master);
-      click(c, t + delay, gain * 0.4, master);
-    });
-  }
-
-  // ── starUp ────────────────────────────────────────────────────────────────────
-  // 2★: bright glassy shimmer burst — the TFT upgrade sound has a fast rising
-  // sparkle with a satisfying two-note chime at the end.
-  // 3★: fuller version — bass pulse + longer cascading sparkle fanfare.
-  function starUp(starLevel) {
-    const c = ac(); if (!c || muted) return;
-    const t = c.currentTime;
-    const master = out(c);
-
-    if (starLevel === 2) {
-      // Rising sparkle: 5 quick sine pings, ascending in pitch
-      const sparkle = [880, 1100, 1320, 1760, 2200];
-      sparkle.forEach((freq, i) => {
-        const d = i * 0.038;
-        sine(c, freq, t + d, 0.22, 0.18 - i * 0.02, master);
-        // Shimmer overtone
-        sine(c, freq * 1.5, t + d, 0.10, 0.05, master);
-      });
-      // Closing two-note chime
-      sine(c, 1046, t + 0.20, 0.35, 0.28, master);
-      sine(c, 1318, t + 0.26, 0.35, 0.24, master);
-      // Noise burst at the start
-      noise(c, t, 0.06, 0.12, 6000, master);
-
-    } else {
-      // 3★: deeper bass pulse at the front
-      const o = c.createOscillator(); const og = c.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(110, t);
-      o.frequency.exponentialRampToValueAtTime(55, t + 0.25);
-      og.gain.setValueAtTime(0.65, t);
-      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-      o.connect(og); og.connect(master);
-      o.start(t); o.stop(t + 0.36);
-
-      // Big noise whomp
-      noise(c, t, 0.12, 0.28, 8000, master);
-
-      // Longer 7-note cascading sparkle
-      const sparkle3 = [660, 880, 1046, 1318, 1568, 1976, 2637];
-      sparkle3.forEach((freq, i) => {
-        const d = i * 0.048;
-        sine(c, freq, t + d, 0.30 - i * 0.01, 0.22 - i * 0.02, master);
-        triangle(c, freq * 1.5, t + d, 0.15, 0.07 - i * 0.008, master);
-      });
-
-      // Grand closing chord
-      [523, 659, 784, 1046].forEach((freq, i) => {
-        sine(c, freq, t + 0.38 + i * 0.02, 0.5, 0.22 - i * 0.04, master);
-      });
-    }
-  }
-
-  // ── toggleMute ────────────────────────────────────────────────────────────────
-  function toggleMute() {
-    muted = !muted;
-    const btn = document.getElementById('mute-btn');
-    if (btn) { btn.textContent = muted ? '🔇' : '🔊'; btn.classList.toggle('muted', muted); }
-  }
-
-  // Prime the AudioContext on first user gesture so sounds are ready immediately
-  document.addEventListener('pointerdown', () => ac(), { once: true });
-
-  return { reroll, buy, buyXP, place, sell, starUp, toggleMute };
-})();
-
-function toggleMute() { sfx.toggleMute(); }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 initConfigScreen();

@@ -97,3 +97,7 @@ V20
 V21
 - Remove champion voicelines when buying the units
 - Please use the official TFT in-game sounds for rerolling, buying, etc.
+
+V22
+- When buying EXP, when the player levels up the EXP numerator should go to 0 and the denominator should be the amount of EXP needed to reach the next level. Currently the EXP numerator remains from the previous level, but it should be reset to 0 upon level up
+- One slow flash that fades away should appear on units that are on the bench or the board when they appear in the shop
