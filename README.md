@@ -101,3 +101,6 @@ V21
 V22
 - When buying EXP, when the player levels up the EXP numerator should go to 0 and the denominator should be the amount of EXP needed to reach the next level. Currently the EXP numerator remains from the previous level, but it should be reset to 0 upon level up
 - One slow flash that fades away should appear on units that are on the bench or the board when they appear in the shop
+
+V23
+- Make sure the EXP thresholds match the numbers in the table at: https://wiki.leagueoflegends.com/en-us/TFT:Experience. Level 7 to 8 is for sure incorrect and going to level 9 makes the XP denominator infinity. When a player hits level 10, the can no longer buy EXP and the EXP fraction should go away

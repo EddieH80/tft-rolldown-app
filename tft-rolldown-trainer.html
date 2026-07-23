@@ -219,13 +219,6 @@
   }
   .shop-slot.will-upgrade-2 { animation: upgrade-pulse 1.8s ease-in-out infinite; }
   .shop-slot.will-upgrade-3 { animation: upgrade-pulse-gold 1.8s ease-in-out infinite; }
-  /* One-shot glow flash when an owned unit appears in the shop */
-  @keyframes owned-flash {
-    0%   { box-shadow: none; }
-    30%  { box-shadow: 0 0 0 2px rgba(126,200,227,0.9), 0 0 18px rgba(126,200,227,0.55); }
-    100% { box-shadow: none; }
-  }
-  .shop-slot.owned-flash { animation: owned-flash 1.1s cubic-bezier(0.4,0,0.6,1) 1 forwards; }
   /* No backdrop pseudo — art fills card cleanly */
   .shop-slot::before { display: none; }
   /* Art covers full slot — wider slot crops sides naturally, showing face/upper body */
@@ -634,7 +627,7 @@
     <div class="topbar-logo">ROLLDOWN<br>TRAINER</div>
     <div class="topbar-stat"><span class="topbar-label">Level</span><span class="topbar-value level" id="hud-level">8</span></div>
     <div class="topbar-stat"><span class="topbar-label">Gold</span><span class="topbar-value gold" id="hud-gold">50</span></div>
-    <div class="topbar-stat xp-wrap"><span class="topbar-label">XP</span><div class="xp-bar"><div class="xp-fill" id="hud-xp-bar" style="width:0%"></div></div><span class="xp-label" id="hud-xp-label">0/0</span></div>
+    <div class="topbar-stat xp-wrap" id="hud-xp-wrap"><span class="topbar-label">XP</span><div class="xp-bar"><div class="xp-fill" id="hud-xp-bar" style="width:0%"></div></div><span class="xp-label" id="hud-xp-label">0/0</span></div>
     <div class="topbar-stat"><span class="topbar-label">Timer</span><span class="topbar-value timer" id="hud-timer">0:30</span></div>
     <div class="topbar-spacer"></div>
     <div class="keybind-hints">
@@ -862,7 +855,7 @@ const ODDS = {
   9:[0.10,0.17,0.25,0.33,0.15], 10:[0.05,0.10,0.20,0.40,0.25],
 };
 
-const XP_THRESHOLDS = [0, 2, 6, 10, 20, 36, 60, 68, 68, Infinity];
+const XP_THRESHOLDS = [0, 2, 6, 10, 20, 36, 60, 68, 68, 68];
 
 // Accurate Set 17 trait breakpoints
 const TRAIT_BREAKPOINTS = {
@@ -1322,13 +1315,17 @@ function renderHUD() {
   document.getElementById('hud-level').textContent = session.level;
   document.getElementById('hud-gold').textContent = session.cfg.infiniteGold ? '∞' : session.gold;
   renderTimer();
-  const prevThresh = XP_THRESHOLDS[session.level-1] || 0;
-  const nextThresh = session.level >= 10 ? session.xp : XP_THRESHOLDS[session.level];
-  const range = nextThresh - prevThresh;
-  const cur = session.xp - prevThresh;
-  const pct = session.level >= 10 ? 100 : Math.min(100, range > 0 ? (cur/range)*100 : 0);
-  document.getElementById('hud-xp-bar').style.width = pct + '%';
-  document.getElementById('hud-xp-label').textContent = session.level >= 10 ? 'MAX' : `${cur}/${range}`;
+  const atMax = session.level >= 10;
+  document.getElementById('hud-xp-wrap').style.display = atMax ? 'none' : '';
+  if (!atMax) {
+    const prevThresh = XP_THRESHOLDS[session.level - 1] || 0;
+    const nextThresh = XP_THRESHOLDS[session.level];
+    const range = nextThresh - prevThresh;
+    const cur = session.xp - prevThresh;
+    const pct = Math.min(100, range > 0 ? (cur / range) * 100 : 0);
+    document.getElementById('hud-xp-bar').style.width = pct + '%';
+    document.getElementById('hud-xp-label').textContent = `${cur}/${range}`;
+  }
   const boardCount = session.board.filter(Boolean).length;
   document.getElementById('board-count').textContent = boardCount;
   document.getElementById('board-cap').textContent = session.level;
@@ -1578,10 +1575,6 @@ function renderShop() {
   const el = document.getElementById('shop-slots');
   el.innerHTML = '';
 
-  // Build set of unit IDs currently owned (on bench or board)
-  const ownedIds = new Set();
-  [...session.bench, ...session.board].forEach(p => { if (p) ownedIds.add(p.unit.id); });
-
   // Trait dot color by trait type (simplified — use cost-tier colors as accent)
   const traitDotColors = {
     'N.O.V.A.':'#7EC8E3','Anima':'#A060C0','Arbiter':'#C89B3C','Dark Star':'#503080',
@@ -1592,9 +1585,6 @@ function renderShop() {
     'Vanguard':'#4060A0','Voyager':'#4090C0','Mecha':'#708070',
   };
 
-  // Collect slots that need the flash so we can trigger them after DOM insertion
-  const flashSlots = [];
-
   for (let i = 0; i < 5; i++) {
     const unit = session.shop[i];
     const div = document.createElement('div');
@@ -1603,11 +1593,8 @@ function renderShop() {
     const isTarget = session.cfg.plannerIds.includes(unit.id);
     const cantAfford = !session.cfg.infiniteGold && session.gold < unit.cost;
     const upgrade = getUpgradePreview(unit.id); // null | 2 | 3
-    const isOwned = ownedIds.has(unit.id);
 
     div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}${upgrade===2?' will-upgrade-2':upgrade===3?' will-upgrade-3':''}`;
-
-    if (isOwned) flashSlots.push(div);
 
     // Art: cover fills portrait card
     const img = document.createElement('img');
@@ -1688,14 +1675,6 @@ function renderShop() {
     });
 
     el.appendChild(div);
-  }
-
-  // Trigger owned-flash: add class in the next animation frame so the CSS
-  // animation fires fresh on every reroll, even for the same unit ID.
-  if (flashSlots.length) {
-    requestAnimationFrame(() => {
-      flashSlots.forEach(slot => slot.classList.add('owned-flash'));
-    });
   }
 }
 
