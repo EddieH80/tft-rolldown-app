@@ -93,3 +93,7 @@ V19
 
 V20
 - Add sound effects from the actual TFT game for actions like rerolling the shop, buying a unit, placing a unit on the board, buying exp, and selling a unit
+
+V21
+- Remove champion voicelines when buying the units
+- Please use the official TFT in-game sounds for rerolling, buying, etc.
