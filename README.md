@@ -90,3 +90,6 @@ V18
 V19
 - Add filters for the team planner to let the user organize by units that are in a specific trait to add them to their planner. Traits that are unique (only 1 unit has that trait) should not be a filter
 - Add a checkbox in the configuration screen for including Zed in the unit pool or not for 5 costs. Zed is a special unit that can only be unlocked through an augment, so without the augment the player should not see him while rolling in the game
+
+V20
+- Add sound effects from the actual TFT game for actions like rerolling the shop, buying a unit, placing a unit on the board, buying exp, and selling a unit

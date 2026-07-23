@@ -78,6 +78,7 @@
   .topbar-btn:hover { border-color: var(--gold); color: var(--gold); }
   .topbar-btn.end-session { border-color: var(--danger); color: var(--danger); }
   .topbar-btn.end-session:hover { background: rgba(192,57,43,0.15); }
+  .topbar-btn.muted { opacity: 0.45; }
 
   /* ─── LAYOUT ─── */
   #app-wrap { display: flex; flex-direction: column; height: 100vh; }
@@ -389,7 +390,7 @@
   .unit-picker-search:focus { border-color:var(--gold-dim); }
   .unit-picker-filters { display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap; }
   .unit-filter-btn { padding:3px 9px; border-radius:var(--radius); border:1px solid var(--border-bright); background:var(--bg-3); font-size:10px; cursor:pointer; transition:all 0.15s; color:var(--text-muted); }
-  .unit-filter-btn.active { border-color:var(--gold); color:var(--gold); }
+  .unit-filter-btn.active { border-color:var(--gold); color:var(--gold); background: rgba(200,155,60,0.1); }
   .unit-filter-btn.fc1.active{border-color:var(--cost1);color:var(--cost1)} .unit-filter-btn.fc2.active{border-color:var(--cost2);color:var(--cost2)} .unit-filter-btn.fc3.active{border-color:var(--cost3);color:var(--cost3)} .unit-filter-btn.fc4.active{border-color:var(--cost4);color:var(--cost4)} .unit-filter-btn.fc5.active{border-color:var(--cost5);color:var(--cost5)}
   .unit-picker-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(62px,1fr)); gap:5px; max-height:280px; overflow-y:auto; padding-right:3px; flex:1; }
   .unit-picker-grid::-webkit-scrollbar { width:3px; }
@@ -582,6 +583,12 @@
           <label for="infinite-gold-chk" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Infinite gold <span style="color:var(--text-dim);font-size:10px;">(practice buying patterns)</span></label>
         </div>
       </div>
+      <div class="config-field">
+        <div class="config-checkbox-row">
+          <input type="checkbox" id="include-zed-chk">
+          <label for="include-zed-chk" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Include Zed in 5-cost pool <span style="color:var(--text-dim);font-size:10px;">(requires augment)</span></label>
+        </div>
+      </div>
     </div>
     <div class="config-right">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -590,6 +597,7 @@
       </div>
       <input class="unit-picker-search" id="unit-search" type="text" placeholder="Search units…">
       <div class="unit-picker-filters" id="cost-filters"></div>
+      <div class="unit-picker-filters" id="trait-filters" style="max-height:60px;overflow-y:auto;"></div>
       <div class="unit-picker-grid" id="unit-picker-grid"></div>
       <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-top:12px;margin-bottom:4px;">Selected (<span id="planner-count">0</span>/10)</div>
       <div class="config-planner-chips" id="config-planner-list"></div>
@@ -629,6 +637,7 @@
       <div class="keybind-hint"><span class="kbd-key">E</span> Sell (hover)</div>
       <div class="keybind-hint"><span class="kbd-key">drag</span> Move</div>
     </div>
+    <button class="topbar-btn" id="mute-btn" onclick="toggleMute()" title="Toggle sound (M)">🔊</button>
     <button class="topbar-btn end-session" onclick="endSession()">End Session</button>
   </div>
   <div id="app-layout">
@@ -864,7 +873,7 @@ const TRAIT_BREAKPOINTS = {
 };
 
 // ─── CONFIG STATE ─────────────────────────────────────────────────────────────
-let config = { level:8, gold:50, timerMode:30, showStats:true, infiniteGold:false, plannerIds:[] };
+let config = { level:8, gold:50, timerMode:30, showStats:true, infiniteGold:false, includeZed:false, plannerIds:[] };
 let session = null;
 
 // ─── DRAG STATE ───────────────────────────────────────────────────────────────
@@ -942,7 +951,13 @@ function getMaxedUnitIds() {
 
 function drawFromTier(cost) {
   const maxed = getMaxedUnitIds();
-  const eligible = UNITS.filter(u => u.cost === cost && session.pool[u.id] > 0 && !maxed.has(u.id));
+  const eligible = UNITS.filter(u => {
+    if (u.cost !== cost) return false;
+    if (session.pool[u.id] <= 0) return false;
+    if (maxed.has(u.id)) return false;
+    if (u.id === 'zed' && !session.cfg.includeZed) return false;
+    return true;
+  });
   if (!eligible.length) return null;
   const total = eligible.reduce((s,u) => s + session.pool[u.id], 0);
   let r = Math.random() * total, cum = 0;
@@ -957,6 +972,7 @@ function doReroll() {
   if (!session || session.ended) return;
   if (!session.cfg.infiniteGold && session.gold < 2) return;
   if (!session.cfg.infiniteGold) session.gold -= 2;
+  sfxReroll();
   rollShop(); renderAll();
 }
 
@@ -964,6 +980,7 @@ function doBuyXP() {
   if (!session || session.ended || session.level >= 10) return;
   if (!session.cfg.infiniteGold && session.gold < 4) return;
   if (!session.cfg.infiniteGold) session.gold -= 4;
+  sfxBuyXP();
   session.xp += 4; checkLevelUp(); renderAll();
 }
 
@@ -978,6 +995,10 @@ function purchaseUnit(slotIdx) {
   if (!session.cfg.infiniteGold && session.gold < unit.cost) return;
 
   const benchFull = session.bench.indexOf(null) === -1;
+
+  // Snapshot star levels before purchase to detect upgrades
+  const preStars = {};
+  [...session.bench, ...session.board].forEach(p => { if(p) preStars[p.unit.id] = Math.max(preStars[p.unit.id]||0, p.copies); });
 
   if (benchFull) {
     const oneStars = [
@@ -1007,6 +1028,18 @@ function purchaseUnit(slotIdx) {
     session.bench[benchIdx] = {unit, copies:1};
     checkCombine(unit.id);
   }
+
+  // Detect if a star-up occurred
+  const postStars = {};
+  [...session.bench, ...session.board].forEach(p => { if(p) postStars[p.unit.id] = Math.max(postStars[p.unit.id]||0, p.copies); });
+  const newStar = postStars[unit.id] || 1;
+  const oldStar = preStars[unit.id] || 1;
+  if (newStar > oldStar) {
+    sfxStarUp(newStar);
+  } else {
+    sfxPurchase(unit);
+  }
+
   session.purchased.push({unit, time: elapsed()});
   renderAll();
 }
@@ -1080,6 +1113,7 @@ function sellUnit(type, idx) {
   const poolReturn = Math.pow(3, placed.copies - 1);
   session.pool[placed.unit.id] = (session.pool[placed.unit.id]||0) + poolReturn;
   arr[idx] = null;
+  sfxSell();
   renderAll();
 }
 
@@ -1200,6 +1234,8 @@ function dropUnit(src, dst) {
   const tmp = dstArr[dst.idx];
   dstArr[dst.idx] = srcArr[src.idx];
   srcArr[src.idx] = tmp;
+  // Play placement sound for bench→board moves
+  if (src.type === 'bench' && dst.type === 'board') sfxPlace();
 }
 
 // ─── KEYBOARD ─────────────────────────────────────────────────────────────────
@@ -1851,9 +1887,15 @@ function openSessionUnitPicker() {
   search.type = 'text'; search.placeholder = 'Search…';
   search.style.cssText = 'width:100%;padding:6px 10px;background:var(--bg-3);border:1px solid var(--border-bright);border-radius:var(--radius);color:var(--text);font-size:12px;margin-bottom:8px;outline:none;';
 
+  // Cost filters
   const filters = document.createElement('div');
-  filters.style.cssText = 'display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;';
+  filters.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;';
   let costF = 0;
+
+  // Trait filters
+  const traitFiltersEl = document.createElement('div');
+  traitFiltersEl.style.cssText = 'display:flex;gap:3px;margin-bottom:8px;flex-wrap:wrap;max-height:72px;overflow-y:auto;';
+  let traitF = '';
 
   const grid = document.createElement('div');
   grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:5px;overflow-y:auto;flex:1;padding-right:2px;';
@@ -1861,8 +1903,12 @@ function openSessionUnitPicker() {
   function rebuildGrid() {
     grid.innerHTML = '';
     const q = search.value.toLowerCase();
-    UNITS.filter(u => (!costF || u.cost === costF) && (!q || u.displayName.toLowerCase().includes(q)))
-      .forEach(unit => {
+    UNITS.filter(u =>
+      (!costF || u.cost === costF) &&
+      (!traitF || u.traits.includes(traitF)) &&
+      (!q || u.displayName.toLowerCase().includes(q)) &&
+      (session.cfg.includeZed || u.id !== 'zed')
+    ).forEach(unit => {
         const card = document.createElement('div');
         const selected = session.cfg.plannerIds.includes(unit.id);
         card.style.cssText = `border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid ${selected?'var(--gold)':'var(--border)'};background:var(--bg-3);position:relative;aspect-ratio:0.85;`;
@@ -1897,10 +1943,10 @@ function openSessionUnitPicker() {
   }
 
   // Cost filter buttons
-  const allBtn = document.createElement('button');
-  allBtn.textContent = 'All'; allBtn.style.cssText = 'padding:3px 8px;border-radius:4px;border:1px solid var(--gold);color:var(--gold);background:rgba(200,155,60,0.1);font-size:10px;cursor:pointer;';
-  allBtn.onclick = () => { costF = 0; rebuildGrid(); };
-  filters.appendChild(allBtn);
+  const allCostBtn = document.createElement('button');
+  allCostBtn.textContent = 'All'; allCostBtn.style.cssText = 'padding:3px 8px;border-radius:4px;border:1px solid var(--gold);color:var(--gold);background:rgba(200,155,60,0.1);font-size:10px;cursor:pointer;';
+  allCostBtn.onclick = () => { costF = 0; rebuildGrid(); };
+  filters.appendChild(allCostBtn);
   [1,2,3,4,5].forEach(c => {
     const btn = document.createElement('button');
     btn.textContent = `${c}g`; btn.style.cssText = `padding:3px 8px;border-radius:4px;border:1px solid var(--border-bright);color:var(--text-muted);background:var(--bg-3);font-size:10px;cursor:pointer;`;
@@ -1908,9 +1954,26 @@ function openSessionUnitPicker() {
     filters.appendChild(btn);
   });
 
+  // Trait filter buttons (non-unique traits only)
+  const anyTraitBtn = document.createElement('button');
+  anyTraitBtn.textContent = 'Any Trait'; anyTraitBtn.style.cssText = 'padding:3px 8px;border-radius:4px;border:1px solid var(--gold);color:var(--gold);background:rgba(200,155,60,0.1);font-size:10px;cursor:pointer;display:flex;align-items:center;gap:3px;';
+  anyTraitBtn.onclick = () => { traitF = ''; rebuildGrid(); };
+  traitFiltersEl.appendChild(anyTraitBtn);
+  MULTI_TRAITS.forEach(trait => {
+    const btn = document.createElement('button');
+    btn.style.cssText = 'padding:3px 8px;border-radius:4px;border:1px solid var(--border-bright);color:var(--text-muted);background:var(--bg-3);font-size:10px;cursor:pointer;display:flex;align-items:center;gap:3px;';
+    const iconImg = traitIconEl(trait, 11, 1); iconImg.style.pointerEvents = 'none';
+    btn.appendChild(iconImg);
+    const lbl = document.createElement('span'); lbl.textContent = trait;
+    btn.appendChild(lbl);
+    btn.onclick = () => { traitF = trait; rebuildGrid(); };
+    traitFiltersEl.appendChild(btn);
+  });
+
   search.oninput = rebuildGrid;
   modal.appendChild(search);
   modal.appendChild(filters);
+  modal.appendChild(traitFiltersEl);
   modal.appendChild(grid);
   rebuildGrid();
 
@@ -2060,36 +2123,72 @@ function initConfigScreen() {
   });
   document.getElementById('show-stats-chk').addEventListener('change', e=>{ config.showStats=e.target.checked; });
   document.getElementById('infinite-gold-chk').addEventListener('change', e=>{ config.infiniteGold=e.target.checked; });
+  document.getElementById('include-zed-chk').addEventListener('change', e=>{ config.includeZed=e.target.checked; renderUnitPicker(); });
 
-  // Unit picker
+  // Cost filter buttons
   const cf = document.getElementById('cost-filters');
   const allBtn = document.createElement('button');
   allBtn.className = 'unit-filter-btn active'; allBtn.textContent = 'All';
-  allBtn.onclick = ()=>{ costFilter=0; updateFilterBtns(allBtn); renderUnitPicker(); };
+  allBtn.onclick = ()=>{ costFilter=0; updateFilterBtns(allBtn, 'cost-filters'); renderUnitPicker(); };
   cf.appendChild(allBtn);
   for (let c = 1; c <= 5; c++) {
     const btn = document.createElement('button');
     btn.className = `unit-filter-btn fc${c}`; btn.textContent = `${c}g`;
     const cost = c;
-    btn.onclick = ()=>{ costFilter=cost; updateFilterBtns(btn); renderUnitPicker(); };
+    btn.onclick = ()=>{ costFilter=cost; updateFilterBtns(btn, 'cost-filters'); renderUnitPicker(); };
     cf.appendChild(btn);
   }
+
+  // Trait filter buttons (non-unique traits only)
+  const tf = document.getElementById('trait-filters');
+  const traitAllBtn = document.createElement('button');
+  traitAllBtn.className = 'unit-filter-btn active'; traitAllBtn.textContent = 'Any Trait';
+  traitAllBtn.onclick = ()=>{ traitFilter=''; updateFilterBtns(traitAllBtn, 'trait-filters'); renderUnitPicker(); };
+  tf.appendChild(traitAllBtn);
+  MULTI_TRAITS.forEach(trait => {
+    const btn = document.createElement('button');
+    btn.className = 'unit-filter-btn';
+    btn.style.display = 'flex'; btn.style.alignItems = 'center'; btn.style.gap = '3px';
+    const iconImg = traitIconEl(trait, 11, 1);
+    iconImg.style.pointerEvents = 'none';
+    btn.appendChild(iconImg);
+    const lbl = document.createElement('span'); lbl.textContent = trait;
+    btn.appendChild(lbl);
+    btn.onclick = ()=>{ traitFilter=trait; updateFilterBtns(btn, 'trait-filters'); renderUnitPicker(); };
+    tf.appendChild(btn);
+  });
+
   document.getElementById('unit-search').addEventListener('input', e=>{ searchQuery=e.target.value.toLowerCase(); renderUnitPicker(); });
   renderUnitPicker();
 }
 
-let costFilter = 0, searchQuery = '';
+let costFilter = 0, searchQuery = '', traitFilter = '';
 
-function updateFilterBtns(active) {
-  document.getElementById('cost-filters').querySelectorAll('.unit-filter-btn').forEach(b=>b.classList.remove('active'));
+// Non-unique traits: traits shared by 2+ units — computed once
+const MULTI_TRAITS = (() => {
+  const counts = {};
+  UNITS.forEach(u => u.traits.forEach(t => { counts[t] = (counts[t]||0) + 1; }));
+  return Object.entries(counts)
+    .filter(([, n]) => n >= 2)
+    .map(([t]) => t)
+    .sort();
+})();
+
+function updateFilterBtns(active, containerId) {
+  const container = containerId ? document.getElementById(containerId) : document.getElementById('cost-filters');
+  if (container) container.querySelectorAll('.unit-filter-btn').forEach(b=>b.classList.remove('active'));
   active.classList.add('active');
 }
 
 function renderUnitPicker() {
   const grid = document.getElementById('unit-picker-grid');
   grid.innerHTML = '';
-  UNITS.filter(u => (!costFilter||u.cost===costFilter) && (!searchQuery||u.displayName.toLowerCase().includes(searchQuery)))
-    .forEach(unit => {
+  UNITS.filter(u =>
+    (!costFilter || u.cost === costFilter) &&
+    (!traitFilter || u.traits.includes(traitFilter)) &&
+    (!searchQuery || u.displayName.toLowerCase().includes(searchQuery)) &&
+    (config.includeZed || u.id !== 'zed')
+  ).forEach(unit => {
       const card = document.createElement('div');
       card.className = 'unit-pick-card'+(config.plannerIds.includes(unit.id)?' selected':'');
       const bar = document.createElement('div'); bar.className=`unit-pick-cost-bar c${unit.cost}`;
@@ -2127,7 +2226,226 @@ function renderConfigPlanner() {
   });
 }
 
-// ─── INIT ─────────────────────────────────────────────────────────────────────
+// ─── SOUND ENGINE ─────────────────────────────────────────────────────────────
+// All UI sounds use the Web Audio API (synthesized) for reliability.
+// Unit purchase sounds use TFT wiki-hosted .ogg VO files (with silent fallback).
+
+let _audioCtx = null;
+let _soundMuted = false;
+const _audioCache = {}; // url → AudioBuffer
+
+function getAudioCtx() {
+  if (!_audioCtx) {
+    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  }
+  if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+function toggleMute() {
+  _soundMuted = !_soundMuted;
+  const btn = document.getElementById('mute-btn');
+  btn.textContent = _soundMuted ? '🔇' : '🔊';
+  btn.classList.toggle('muted', _soundMuted);
+}
+
+// Keyboard shortcut M = mute toggle
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key.toLowerCase() === 'm') toggleMute();
+});
+
+// ── Synthesized UI sounds ──────────────────────────────────────────────────────
+
+function sfxReroll() {
+  // Fast coin/card shuffle: quick descending filtered noise burst
+  const ctx = getAudioCtx(); if (!ctx || _soundMuted) return;
+  const t = ctx.currentTime;
+  // Two quick layered clicks with pitch sweep
+  [0, 0.04, 0.09].forEach((delay, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const freq = 520 - i * 80;
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, t + delay);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.4, t + delay + 0.06);
+    gain.gain.setValueAtTime(0.18, t + delay);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.07);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t + delay); osc.stop(t + delay + 0.08);
+  });
+  // Noise swoosh
+  const bufLen = Math.floor(ctx.sampleRate * 0.12);
+  const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufLen);
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'bandpass'; nf.frequency.value = 1200; nf.Q.value = 1.5;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.12, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  noise.connect(nf); nf.connect(ng); ng.connect(ctx.destination);
+  noise.start(t); noise.stop(t + 0.13);
+}
+
+function sfxBuyXP() {
+  // Rising chime — like leveling up
+  const ctx = getAudioCtx(); if (!ctx || _soundMuted) return;
+  const t = ctx.currentTime;
+  const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
+  notes.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const st = t + i * 0.07;
+    gain.gain.setValueAtTime(0, st);
+    gain.gain.linearRampToValueAtTime(0.22, st + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, st + 0.28);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(st); osc.stop(st + 0.3);
+  });
+  // Shimmer overtone
+  const osc2 = ctx.createOscillator();
+  const g2 = ctx.createGain();
+  osc2.type = 'sine'; osc2.frequency.value = 2093;
+  g2.gain.setValueAtTime(0.07, t + 0.18); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  osc2.connect(g2); g2.connect(ctx.destination);
+  osc2.start(t + 0.18); osc2.stop(t + 0.6);
+}
+
+function sfxPlace() {
+  // Soft hex placement thud
+  const ctx = getAudioCtx(); if (!ctx || _soundMuted) return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+  gain.gain.setValueAtTime(0.35, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  // add a click layer
+  const bufLen = Math.floor(ctx.sampleRate * 0.025);
+  const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufLen * 0.2));
+  const click = ctx.createBufferSource(); click.buffer = buf;
+  const cg = ctx.createGain(); cg.gain.value = 0.2;
+  click.connect(cg); cg.connect(ctx.destination); click.start(t);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(t); osc.stop(t + 0.15);
+}
+
+function sfxSell() {
+  // Gold coin clink
+  const ctx = getAudioCtx(); if (!ctx || _soundMuted) return;
+  const t = ctx.currentTime;
+  [0, 0.05, 0.09].forEach((delay, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = i === 0 ? 'triangle' : 'sine';
+    osc.frequency.setValueAtTime(1200 + i * 200, t + delay);
+    osc.frequency.exponentialRampToValueAtTime(800 + i * 100, t + delay + 0.15);
+    gain.gain.setValueAtTime(0.15 - i * 0.03, t + delay);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.18);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t + delay); osc.stop(t + delay + 0.2);
+  });
+}
+
+function sfxStarUp(starLevel) {
+  // 2★: bright sparkle fanfare; 3★: grand ascending fanfare
+  const ctx = getAudioCtx(); if (!ctx || _soundMuted) return;
+  const t = ctx.currentTime;
+  if (starLevel === 2) {
+    const notes = [659, 784, 988, 1319]; // E5 G5 B5 E6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      const st = t + i * 0.06;
+      gain.gain.setValueAtTime(0.28, st);
+      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.35);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(st); osc.stop(st + 0.4);
+      // Sparkle shimmer
+      const osc3 = ctx.createOscillator();
+      const g3 = ctx.createGain();
+      osc3.type = 'sine'; osc3.frequency.value = freq * 2;
+      g3.gain.setValueAtTime(0.08, st); g3.gain.exponentialRampToValueAtTime(0.001, st + 0.2);
+      osc3.connect(g3); g3.connect(ctx.destination);
+      osc3.start(st); osc3.stop(st + 0.22);
+    });
+  } else {
+    // 3★: grand multi-octave fanfare
+    const notes = [523, 659, 784, 1047, 1319, 1568, 2093];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = i < 3 ? 'triangle' : 'sine';
+      osc.frequency.value = freq;
+      const st = t + i * 0.055;
+      gain.gain.setValueAtTime(0.3, st);
+      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.5);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(st); osc.stop(st + 0.55);
+    });
+    // Bass hit at start
+    const bass = ctx.createOscillator();
+    const bg = ctx.createGain();
+    bass.type = 'sine'; bass.frequency.setValueAtTime(130, t); bass.frequency.exponentialRampToValueAtTime(55, t + 0.3);
+    bg.gain.setValueAtTime(0.4, t); bg.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    bass.connect(bg); bg.connect(ctx.destination); bass.start(t); bass.stop(t + 0.45);
+  }
+}
+
+// ── Unit purchase voice lines from wiki ────────────────────────────────────────
+
+// Build a mapping from unit key → wiki URL for purchase VO
+// Keys are matched against TFT16 names available on the wiki (close enough for most)
+function unitPurchaseUrl(unit) {
+  // Prefer tft17key override, else dkey, else capitalize key
+  const wikiKey = unit.dkey || (unit.key ? unit.key.charAt(0).toUpperCase() + unit.key.slice(1) : null);
+  if (!wikiKey) return null;
+  return `https://wiki.leagueoflegends.com/en-us/images/TFT16_${wikiKey}_Purchase.ogg`;
+}
+
+async function loadAudio(url) {
+  if (_audioCache[url]) return _audioCache[url];
+  const ctx = getAudioCtx(); if (!ctx) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const arrBuf = await res.arrayBuffer();
+    const decoded = await ctx.decodeAudioData(arrBuf);
+    _audioCache[url] = decoded;
+    return decoded;
+  } catch(e) { return null; }
+}
+
+function sfxPurchase(unit) {
+  if (_soundMuted) return;
+  const url = unitPurchaseUrl(unit);
+  if (!url) { sfxPlace(); return; }
+  const ctx = getAudioCtx(); if (!ctx) return;
+  loadAudio(url).then(buf => {
+    if (!buf || _soundMuted) return;
+    const src = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.7;
+    src.buffer = buf;
+    src.connect(gain); gain.connect(ctx.destination);
+    src.start();
+  }).catch(() => sfxPlace());
+}
+
+// Pre-warm audio context on first user interaction
+document.addEventListener('click', () => getAudioCtx(), { once: true });
+
+
 initConfigScreen();
 renderConfigPlanner();
 </script>
