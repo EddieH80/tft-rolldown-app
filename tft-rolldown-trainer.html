@@ -636,6 +636,7 @@
       <div class="keybind-hint"><span class="kbd-key">E</span> Sell (hover)</div>
       <div class="keybind-hint"><span class="kbd-key">drag</span> Move</div>
     </div>
+    <button class="topbar-btn" id="btn-mute" onclick="toggleMute()" title="Toggle sound effects" style="margin-right:6px;">🔊</button>
     <button class="topbar-btn end-session" onclick="endSession()">End Session</button>
   </div>
   <div id="app-layout">
@@ -870,6 +871,124 @@ const TRAIT_BREAKPOINTS = {
   "Commander":[1],"Doomer":[1],"Galaxy Hunter":[1],
 };
 
+// ─── SOUND FX (synthesized — no external audio assets) ────────────────────────
+const SFX = (() => {
+  let ctx = null;
+  let muted = (localStorage && localStorage.getItem('rolldown-muted') === '1') || false;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  // One oscillator "note": freq envelope + gain envelope
+  function tone(t0, {freq, freqEnd, type='sine', dur=0.12, gain=0.18, attack=0.005}) {
+    const ac = getCtx();
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (freqEnd) osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd,1), t0 + dur);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(gain, t0 + attack);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(g); g.connect(ac.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+  // Short filtered noise burst (for reroll "shuffle" texture)
+  function noiseBurst(t0, {dur=0.09, gain=0.12, filterFreq=2500}) {
+    const ac = getCtx();
+    const bufSize = Math.ceil(ac.sampleRate * dur);
+    const buf = ac.createBuffer(1, bufSize, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random()*2-1) * (1 - i/bufSize);
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    const filt = ac.createBiquadFilter();
+    filt.type = 'bandpass'; filt.frequency.value = filterFreq; filt.Q.value = 0.8;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(gain, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(filt); filt.connect(g); g.connect(ac.destination);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }
+  // Layered, slightly-detuned sine trio for a sparkly "shimmer" texture (combine sounds)
+  function shimmer(t0, {freq, dur=0.3, gain=0.09, detune=6}) {
+    const ac = getCtx();
+    [0, detune, -detune].forEach(d => {
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      osc.detune.setValueAtTime(d, t0);
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(gain/3, t0 + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      osc.connect(g); g.connect(ac.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.02);
+    });
+  }
+  function play(fn) {
+    if (muted) return;
+    try { fn(getCtx().currentTime); } catch(e) { /* audio unavailable, fail silently */ }
+  }
+  return {
+    isMuted: () => muted,
+    setMuted: (m) => { muted = m; try { localStorage.setItem('rolldown-muted', m ? '1':'0'); } catch(e){} },
+    // Buy unit: bright ascending two-note "cha-ching"
+    buy: () => play(t0 => {
+      tone(t0,        {freq:520, freqEnd:520, type:'sine', dur:0.06, gain:0.07});
+      tone(t0 + 0.045,{freq:780, freqEnd:840,  type:'sine', dur:0.10, gain:0.08});
+    }),
+    // Sell unit: soft descending tone, coins-back feel
+    sell: () => play(t0 => {
+      tone(t0, {freq:600, freqEnd:340, type:'sine', dur:0.12, gain:0.07});
+    }),
+    // Place on board: low, solid "snap" thud
+    place: () => play(t0 => {
+      tone(t0, {freq:160, freqEnd:85, type:'sine', dur:0.07, gain:0.09, attack:0.002});
+    }),
+    // Move within board/bench: light quick click
+    move: () => play(t0 => {
+      tone(t0, {freq:420, freqEnd:380, type:'sine', dur:0.035, gain:0.045, attack:0.001});
+    }),
+    // Reroll: quick shuffled noise + falling blip, like a slot spin
+    reroll: () => play(t0 => {
+      noiseBurst(t0, {dur:0.08, gain:0.05, filterFreq:1500});
+      tone(t0 + 0.02, {freq:460, freqEnd:260, type:'sine', dur:0.09, gain:0.04});
+    }),
+    // Buy XP: sparkly rising three-note shimmer
+    buyxp: () => play(t0 => {
+      tone(t0,        {freq:660, type:'sine', dur:0.07, gain:0.055});
+      tone(t0 + 0.06, {freq:880, type:'sine', dur:0.07, gain:0.055});
+      tone(t0 + 0.12, {freq:1175,type:'sine', dur:0.10, gain:0.06});
+    }),
+    // 2★ combine: short bright arpeggio ending in a soft shimmer sparkle
+    combine2: () => play(t0 => {
+      tone(t0,        {freq:784,  type:'sine', dur:0.08, gain:0.06});
+      tone(t0 + 0.07, {freq:988,  type:'sine', dur:0.08, gain:0.065});
+      shimmer(t0 + 0.13, {freq:1568, dur:0.32, gain:0.09});
+    }),
+    // 3★ combine: grander — longer rising arpeggio + layered shimmer chord finish
+    combine3: () => play(t0 => {
+      tone(t0,        {freq:523,  type:'sine', dur:0.08, gain:0.055});
+      tone(t0 + 0.07, {freq:659,  type:'sine', dur:0.08, gain:0.06});
+      tone(t0 + 0.14, {freq:784,  type:'sine', dur:0.09, gain:0.065});
+      tone(t0 + 0.21, {freq:1047, type:'sine', dur:0.11, gain:0.07});
+      shimmer(t0 + 0.30, {freq:1568, dur:0.55, gain:0.10});
+      shimmer(t0 + 0.33, {freq:2093, dur:0.55, gain:0.075});
+    }),
+  };
+})();
+
+function toggleMute() {
+  SFX.setMuted(!SFX.isMuted());
+  updateMuteBtn();
+}
+function updateMuteBtn() {
+  const btn = document.getElementById('btn-mute');
+  if (btn) btn.textContent = SFX.isMuted() ? '🔇' : '🔊';
+}
+
 // ─── CONFIG STATE ─────────────────────────────────────────────────────────────
 let config = { level:8, gold:50, timerMode:30, showStats:true, infiniteGold:false, includeZed:false, plannerIds:[] };
 let session = null;
@@ -970,6 +1089,7 @@ function doReroll() {
   if (!session || session.ended) return;
   if (!session.cfg.infiniteGold && session.gold < 2) return;
   if (!session.cfg.infiniteGold) session.gold -= 2;
+  SFX.reroll();
   rollShop(); renderAll();
 }
 
@@ -977,6 +1097,7 @@ function doBuyXP() {
   if (!session || session.ended || session.level >= 10) return;
   if (!session.cfg.infiniteGold && session.gold < 4) return;
   if (!session.cfg.infiniteGold) session.gold -= 4;
+  SFX.buyxp();
   session.xp += 4; checkLevelUp(); renderAll();
 }
 
@@ -1000,6 +1121,7 @@ function purchaseUnit(slotIdx) {
     const willCombine = oneStars.length >= 2;
     if (!willCombine) { flashRed(document.getElementById('bench-row')); return; }
 
+    SFX.buy();
     if (!session.cfg.infiniteGold) session.gold -= unit.cost;
     session.shop[slotIdx] = null;
     if (session.shopReserved[unit.id]) {
@@ -1007,10 +1129,13 @@ function purchaseUnit(slotIdx) {
       if (!session.shopReserved[unit.id]) delete session.shopReserved[unit.id];
     }
     session.bench.push({unit, copies:1});
-    checkCombine(unit.id);
+    const starReached = checkCombine(unit.id);
+    if (starReached === 2) SFX.combine2();
+    else if (starReached === 3) SFX.combine3();
     session.bench = session.bench.filter((u, i) => i < 9 || u !== null).slice(0, 9);
   } else {
     const benchIdx = session.bench.indexOf(null);
+    SFX.buy();
     if (!session.cfg.infiniteGold) session.gold -= unit.cost;
     session.shop[slotIdx] = null;
     if (session.shopReserved[unit.id]) {
@@ -1018,7 +1143,9 @@ function purchaseUnit(slotIdx) {
       if (!session.shopReserved[unit.id]) delete session.shopReserved[unit.id];
     }
     session.bench[benchIdx] = {unit, copies:1};
-    checkCombine(unit.id);
+    const starReached = checkCombine(unit.id);
+    if (starReached === 2) SFX.combine2();
+    else if (starReached === 3) SFX.combine3();
   }
   session.purchased.push({unit, time: elapsed()});
   renderAll();
@@ -1027,6 +1154,7 @@ function purchaseUnit(slotIdx) {
 function checkCombine(uid) {
   // Keep combining until stable (handles cascades: 3×1★→2★, then if 3×2★→3★)
   // Board copies always take priority as the "survivor" — bench copies are consumed first.
+  let maxStarReached = 0;
   let changed = true;
   while (changed) {
     changed = false;
@@ -1044,6 +1172,7 @@ function checkCombine(uid) {
         if(p.type==='bench') session.bench[p.i]=null; else session.board[p.i]=null;
       });
       oneStars[0].u.copies = 2;
+      maxStarReached = Math.max(maxStarReached, 2);
       changed = true;
       continue;
     }
@@ -1054,9 +1183,11 @@ function checkCombine(uid) {
         if(p.type==='bench') session.bench[p.i]=null; else session.board[p.i]=null;
       });
       twoStars[0].u.copies = 3;
+      maxStarReached = Math.max(maxStarReached, 3);
       changed = true;
     }
   }
+  return maxStarReached;
 }
 
 function flashRed(el) {
@@ -1088,6 +1219,7 @@ function sellUnit(type, idx) {
   const arr = type === 'bench' ? session.bench : session.board;
   const placed = arr[idx];
   if (!placed) return;
+  SFX.sell();
   session.gold += sellValue(placed);
   // Return the component 1★ copies back to the pool: 3^(starLevel-1)
   const poolReturn = Math.pow(3, placed.copies - 1);
@@ -1208,6 +1340,12 @@ function dropUnit(src, dst) {
   if (src.type === 'bench' && dst.type === 'board' && !dstArr[dst.idx]) {
     const boardCount = session.board.filter(Boolean).length;
     if (boardCount >= session.level) return; // bench→board would exceed cap
+  }
+  // Bench → empty board hex = "placing" a new unit; anything else = "moving/repositioning"
+  if (src.type === 'bench' && dst.type === 'board' && !dstArr[dst.idx]) {
+    SFX.place();
+  } else {
+    SFX.move();
   }
   // Swap src and dst (works for board↔board, bench↔bench, bench↔board, board↔bench)
   const tmp = dstArr[dst.idx];
@@ -2210,6 +2348,7 @@ function renderConfigPlanner() {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 initConfigScreen();
 renderConfigPlanner();
+updateMuteBtn();
 </script>
 </body>
 </html>

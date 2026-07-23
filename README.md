@@ -107,3 +107,7 @@ V23
 
 V24
 - The thresholds from the table are being misinterpreted. When a player is at level 4, 0 EXP, the must buy 10 EXP to hit level 5. Since EXP is bought in increments of 4, the player spends 12 gold to buy 10 EXP, which results in the being Level 5 with 2/20 EXP progress to Level 6. The player then needs 18 EXP to get to level 6, which means they need to spend 20 gold to buy 20 EXP, leaving them at Level 7 with 2 / 36 EXP bought. Please mirror this behavior for all levels, especially at level 8, 9, and 10 where the player will need to spend 60, 68, and 68 again to reach each level.
+
+V25
+- Improvements to sound effects
+- Fixing leveling bugs
