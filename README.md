@@ -111,3 +111,7 @@ V24
 V25
 - Improvements to sound effects
 - Fixing leveling bugs
+
+V26
+- Implemented "W" keybind to move units from bench to board and vice versa
+- Fixed bug where units in the shop that are on your board or bench don't briefly flash anymore
