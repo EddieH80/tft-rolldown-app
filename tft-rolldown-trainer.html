@@ -156,6 +156,7 @@
   .hex-cell-wrap.occupied::before   { background: var(--border-bright); }
   .hex-cell-wrap.occupied { cursor: grab; }
   .hex-cell-wrap.occupied:active    { cursor: grabbing; }
+  .hex-cell-wrap.selected::before   { background: var(--gold); box-shadow: 0 0 8px 1px rgba(200,155,60,0.6); }
 
   /* bench stays rectangular */
   .bench-cell {
@@ -172,6 +173,7 @@
   .bench-cell.sell-hover { border-color: var(--danger)  !important; background: rgba(192,57,43,0.15); }
   .bench-cell.occupied   { border-color: var(--border-bright); cursor: grab; }
   .bench-cell.occupied:active { cursor: grabbing; }
+  .bench-cell.selected   { border-color: var(--gold) !important; box-shadow: 0 0 8px 1px rgba(200,155,60,0.5); }
 
   /* ─── UNIT TOKEN ─── */
   .unit-token { width:100%; height:100%; position:relative; display:flex; align-items:flex-end; }
@@ -219,6 +221,13 @@
   }
   .shop-slot.will-upgrade-2 { animation: upgrade-pulse 1.8s ease-in-out infinite; }
   .shop-slot.will-upgrade-3 { animation: upgrade-pulse-gold 1.8s ease-in-out infinite; }
+  /* Brief white flash for shop units you already own a copy of (bench or board) */
+  @keyframes owned-flash {
+    0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0); filter: brightness(1); }
+    18%  { box-shadow: 0 0 10px 2px rgba(255,255,255,0.63); filter: brightness(1.28); }
+    100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); filter: brightness(1); }
+  }
+  .shop-slot.owned-flash { animation: owned-flash 1.1s ease-out 1; }
   /* No backdrop pseudo — art fills card cleanly */
   .shop-slot::before { display: none; }
   /* Art covers full slot — wider slot crops sides naturally, showing face/upper body */
@@ -995,7 +1004,8 @@ let session = null;
 
 // ─── DRAG STATE ───────────────────────────────────────────────────────────────
 let drag = null; // {type:'bench'|'board', idx}
-let hoverCell = null; // {type, idx} — for E key sell
+let hoverCell = null; // {type, idx} — for E key sell (hover-based, mouse convenience)
+let selectedCell = null; // {type, idx} — persistent click-to-select target for W (move) and E (sell)
 let hoverShop = false; // true when dragging over the shop area
 
 // ─── SESSION ──────────────────────────────────────────────────────────────────
@@ -1229,12 +1239,17 @@ function sellUnit(type, idx) {
 }
 
 // ─── DRAG & DROP ──────────────────────────────────────────────────────────────
+let dragStartPos = null;
+let dragMoved = false;
+
 function initDragOnCell(el, type, idx) {
   el.addEventListener('mousedown', (e) => {
     if (!session || session.ended) return;
     const placed = type === 'bench' ? session.bench[idx] : session.board[idx];
     if (!placed) return;
     e.preventDefault();
+    dragStartPos = {x: e.clientX, y: e.clientY};
+    dragMoved = false;
     startDrag(type, idx, placed, e);
   });
   el.addEventListener('mouseenter', () => {
@@ -1274,6 +1289,10 @@ function getCellEl(type, idx) {
 
 document.addEventListener('mousemove', (e) => {
   if (!drag) return;
+  if (dragStartPos) {
+    const dx = e.clientX - dragStartPos.x, dy = e.clientY - dragStartPos.y;
+    if (Math.sqrt(dx*dx + dy*dy) > 5) dragMoved = true;
+  }
   const ghost = document.getElementById('drag-ghost');
   ghost.style.left = e.clientX + 'px';
   ghost.style.top = e.clientY + 'px';
@@ -1314,7 +1333,10 @@ document.addEventListener('mouseup', (e) => {
     }
   }
 
-  if (hoverShop && session) {
+  if (!dragMoved) {
+    // Plain click (mousedown+mouseup with no meaningful movement) — toggle persistent selection
+    toggleSelect(drag.type, drag.idx);
+  } else if (hoverShop && session) {
     sellUnit(drag.type, drag.idx);
   } else if (resolvedCell) {
     const src = drag;
@@ -1327,8 +1349,67 @@ document.addEventListener('mouseup', (e) => {
   hoverShop = false;
   hoverCell = null;
   drag = null;
+  dragStartPos = null;
+  dragMoved = false;
   renderAll();
 });
+
+function toggleSelect(type, idx) {
+  if (selectedCell && selectedCell.type === type && selectedCell.idx === idx) {
+    selectedCell = null;
+  } else {
+    selectedCell = {type, idx};
+  }
+}
+
+function firstOpenBoardSlotBottomUp() {
+  const COLS = 7, ROWS = 4;
+  for (let row = ROWS - 1; row >= 0; row--) {
+    for (let col = 0; col < COLS; col++) {
+      const idx = row * COLS + col;
+      if (!session.board[idx]) return idx;
+    }
+  }
+  return -1;
+}
+
+function moveUnitViaW(cell) {
+  if (!cell) return;
+  const srcArr = cell.type === 'bench' ? session.bench : session.board;
+  const placed = srcArr[cell.idx];
+  if (!placed) return;
+
+  const wasSelected = selectedCell && selectedCell.type === cell.type && selectedCell.idx === cell.idx;
+
+  if (cell.type === 'bench') {
+    // Move to the board: needs an empty hex and must respect the level cap.
+    // Fills the bottom row first, left to right, then works upward.
+    const boardCount = session.board.filter(Boolean).length;
+    const emptyIdx = firstOpenBoardSlotBottomUp();
+    if (boardCount >= session.level || emptyIdx === -1) {
+      flashRed(getCellEl('bench', cell.idx));
+      return;
+    }
+    session.board[emptyIdx] = placed;
+    session.bench[cell.idx] = null;
+    SFX.place();
+    if (wasSelected) selectedCell = {type:'board', idx: emptyIdx};
+    if (hoverCell && hoverCell.type === 'bench' && hoverCell.idx === cell.idx) hoverCell = null;
+  } else {
+    // Move from board back to the bench: needs an empty bench slot
+    const emptyIdx = session.bench.indexOf(null);
+    if (emptyIdx === -1) {
+      flashRed(getCellEl('board', cell.idx));
+      return;
+    }
+    session.bench[emptyIdx] = placed;
+    session.board[cell.idx] = null;
+    SFX.move();
+    if (wasSelected) selectedCell = {type:'bench', idx: emptyIdx};
+    if (hoverCell && hoverCell.type === 'board' && hoverCell.idx === cell.idx) hoverCell = null;
+  }
+  renderAll();
+}
 
 function dropUnit(src, dst) {
   const srcArr = src.type === 'bench' ? session.bench : session.board;
@@ -1360,10 +1441,17 @@ document.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (key === 'd') { e.preventDefault(); doReroll(); }
   else if (key === 'f') { e.preventDefault(); doBuyXP(); }
+  else if (key === 'w') {
+    e.preventDefault();
+    moveUnitViaW(hoverCell || selectedCell);
+  }
   else if (key === 'e') {
     e.preventDefault();
-    if (hoverCell) {
-      sellUnit(hoverCell.type, hoverCell.idx);
+    const cell = hoverCell || selectedCell;
+    if (cell) {
+      const wasSelected = selectedCell && selectedCell.type === cell.type && selectedCell.idx === cell.idx;
+      sellUnit(cell.type, cell.idx);
+      if (wasSelected) selectedCell = null;
     }
   }
 });
@@ -1390,6 +1478,9 @@ function renderTimer() {
 // ─── SESSION LIFECYCLE ────────────────────────────────────────────────────────
 function startSession() {
   session = newSession(config);
+  selectedCell = null;
+  hoverCell = null;
+  lastShopKey = null;
   rollShop();
   document.getElementById('config-screen').style.display = 'none';
   document.getElementById('summary-screen').style.display = 'none';
@@ -1426,6 +1517,11 @@ function restartSameConfig() {
 // ─── RENDER ───────────────────────────────────────────────────────────────────
 function renderAll() {
   if (!session) return;
+  // Guard against a stale selection (e.g. the selected unit was sold or combined away)
+  if (selectedCell) {
+    const arr = selectedCell.type === 'bench' ? session.bench : session.board;
+    if (!arr[selectedCell.idx]) selectedCell = null;
+  }
   renderHUD(); renderBoard(); renderBench(); renderShop(); renderSidebar();
 }
 
@@ -1550,6 +1646,9 @@ function renderBoard() {
         wrapDiv.classList.add('occupied');
         cell.appendChild(makeToken(placed));
       }
+      if (selectedCell && selectedCell.type === 'board' && selectedCell.idx === idx) {
+        wrapDiv.classList.add('selected');
+      }
 
       wrapDiv.appendChild(cell);
       initDragOnCell(wrapDiv, 'board', idx);
@@ -1585,10 +1684,14 @@ function initShopBuySystem() {
   shopGhost.appendChild(shopGhostImg);
   document.body.appendChild(shopGhost);
 
-  // Track mousemove — show ghost immediately on any movement
+  // Track mousemove — purely cosmetic now (shows the drag ghost past a jitter
+  // threshold). Purchase always happens on mouseup regardless of this state.
   document.addEventListener('mousemove', (e) => {
     if (!shopDragState) return;
     if (!shopDragState.dragging) {
+      const dx = e.clientX - shopDragState.startX;
+      const dy = e.clientY - shopDragState.startY;
+      if (Math.sqrt(dx*dx + dy*dy) < 12) return; // still within click jitter, not a real drag yet
       shopDragState.dragging = true;
       shopGhostImg.src = tileUrl(shopDragState.unit);
       shopGhost.style.display = 'block';
@@ -1598,7 +1701,11 @@ function initShopBuySystem() {
   });
 
   // Capture-phase mouseup fires before board drag's bubble-phase mouseup
-  // This ensures we handle the shop purchase before board state is modified
+  // This ensures we handle the shop purchase before board state is modified.
+  // A mousedown that started on a shop slot ALWAYS results in a purchase on release —
+  // regardless of how far the mouse moved or where it was released. There's no
+  // legitimate "cancel" gesture here, so treating any wobble/drag as an abort was
+  // just causing fast clicks to silently drop the purchase.
   document.addEventListener('mouseup', (e) => {
     if (!shopDragState || e.button !== 0) return;
     const state = shopDragState;
@@ -1607,24 +1714,8 @@ function initShopBuySystem() {
 
     if (!session || session.ended) return;
 
-    const shopArea = document.getElementById('shop-area');
-
-    if (!state.dragging) {
-      // Pure click (no movement) — buy immediately
-      purchaseUnit(state.slot);
-      renderAll();
-    } else {
-      // Drag-release: buy only if released outside the shop area
-      const rect = shopArea.getBoundingClientRect();
-      const overShop = (
-        e.clientX >= rect.left && e.clientX <= rect.right &&
-        e.clientY >= rect.top  && e.clientY <= rect.bottom
-      );
-      if (!overShop) {
-        purchaseUnit(state.slot);
-        renderAll();
-      }
-    }
+    purchaseUnit(state.slot);
+    renderAll();
   }, true); // true = capture phase, fires before bubble-phase board handler
 }
 
@@ -1664,6 +1755,9 @@ function renderBench() {
     if (placed) {
       div.classList.add('occupied');
       div.appendChild(makeToken(placed));
+    }
+    if (selectedCell && selectedCell.type === 'bench' && selectedCell.idx === i) {
+      div.classList.add('selected');
     }
     initDragOnCell(div, 'bench', i);
     el.appendChild(div);
@@ -1709,9 +1803,21 @@ function getUpgradePreview(uid) {
   return null;
 }
 
+function isOwned(uid) {
+  return session.board.some(u => u && u.unit.id === uid) || session.bench.some(u => u && u.unit.id === uid);
+}
+
+let lastShopKey = null; // tracks the shop's contents so the owned-flash only plays on genuine refreshes
+
 function renderShop() {
   const el = document.getElementById('shop-slots');
   el.innerHTML = '';
+
+  // Only flash owned units when the shop itself actually changed since the last render
+  // (a reroll, a purchase, or a new session) — not on every unrelated re-render (moving a unit, buying XP, etc.)
+  const shopKey = session.shop.map(u => u ? u.id : '').join(',');
+  const shopChanged = shopKey !== lastShopKey;
+  lastShopKey = shopKey;
 
   // Trait dot color by trait type (simplified — use cost-tier colors as accent)
   const traitDotColors = {
@@ -1731,8 +1837,9 @@ function renderShop() {
     const isTarget = session.cfg.plannerIds.includes(unit.id);
     const cantAfford = !session.cfg.infiniteGold && session.gold < unit.cost;
     const upgrade = getUpgradePreview(unit.id); // null | 2 | 3
+    const owned = !upgrade && shopChanged && isOwned(unit.id); // simple "you already have this" flash; the pulse takes over once a combine is imminent
 
-    div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}${upgrade===2?' will-upgrade-2':upgrade===3?' will-upgrade-3':''}`;
+    div.className = `shop-slot cost${unit.cost}${isTarget?' is-target':''}${cantAfford?' cant-afford':''}${upgrade===2?' will-upgrade-2':upgrade===3?' will-upgrade-3':''}${owned?' owned-flash':''}`;
 
     // Art: cover fills portrait card
     const img = document.createElement('img');
@@ -1809,7 +1916,7 @@ function renderShop() {
       e.stopPropagation(); // prevent board drag system from firing
       // Cancel any board drag that may have started
       drag = null;
-      shopDragState = { slot: si_cap, unit: unit_cap, dragging: false };
+      shopDragState = { slot: si_cap, unit: unit_cap, dragging: false, startX: e.clientX, startY: e.clientY };
     });
 
     el.appendChild(div);
