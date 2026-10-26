@@ -573,6 +573,10 @@
         <div class="config-range-row">
           <input type="range" id="gold-range" min="10" max="100" value="50" step="5">
           <span class="config-range-value" id="gold-range-val">50g</span>
+          <div class="config-checkbox-row" style="flex-shrink:0;" title="Practice buying patterns">
+            <input type="checkbox" id="infinite-gold-chk">
+            <label for="infinite-gold-chk" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Infinite gold</label>
+          </div>
         </div>
       </div>
       <div class="config-field">
@@ -583,12 +587,6 @@
         <div class="config-checkbox-row">
           <input type="checkbox" id="show-stats-chk" checked>
           <label for="show-stats-chk" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Show post-session stats</label>
-        </div>
-      </div>
-      <div class="config-field">
-        <div class="config-checkbox-row">
-          <input type="checkbox" id="infinite-gold-chk">
-          <label for="infinite-gold-chk" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Infinite gold <span style="color:var(--text-dim);font-size:10px;">(practice buying patterns)</span></label>
         </div>
       </div>
     </div>
@@ -2396,12 +2394,12 @@ function initConfigScreen() {
   // Cost filter buttons
   const cf = document.getElementById('cost-filters');
   const allBtn = document.createElement('button');
-  allBtn.className = 'unit-filter-btn active'; allBtn.textContent = 'All';
+  allBtn.className = 'unit-filter-btn'; allBtn.textContent = 'All';
   allBtn.onclick = ()=>{ costFilter=0; updateFilterBtns(allBtn, 'cost-filters'); renderUnitPicker(); };
   cf.appendChild(allBtn);
   for (let c = 1; c <= 5; c++) {
     const btn = document.createElement('button');
-    btn.className = `unit-filter-btn fc${c}`; btn.textContent = `${c}g`;
+    btn.className = `unit-filter-btn fc${c}${c === costFilter ? ' active' : ''}`; btn.textContent = `${c}g`;
     const cost = c;
     btn.onclick = ()=>{ costFilter=cost; updateFilterBtns(btn, 'cost-filters'); renderUnitPicker(); };
     cf.appendChild(btn);
@@ -2430,7 +2428,7 @@ function initConfigScreen() {
   renderUnitPicker();
 }
 
-let costFilter = 0, searchQuery = '', traitFilter = '';
+let costFilter = 4, searchQuery = '', traitFilter = '';
 
 // Non-unique traits: traits shared by 2+ units — computed once
 const MULTI_TRAITS = (() => {
